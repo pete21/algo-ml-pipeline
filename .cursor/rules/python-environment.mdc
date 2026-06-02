@@ -1,0 +1,40 @@
+---
+description: Python virtual environment configuration - always use the project venv
+alwaysApply: true
+---
+
+# Python Virtual Environment Configuration
+
+## Virtual Environment Location
+- **Always use the virtual environment located at:** `/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment`
+- **Python interpreter path:** `/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/python`
+- **Pip path:** `/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/pip`
+
+## CRITICAL: Running Python Commands
+
+When executing ANY Python command or script, you MUST use one of these approaches:
+
+### Option 1: Use Full Path (RECOMMENDED)
+Always use the full path to the Python interpreter:
+```bash
+/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/python your_script.py
+/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/pip install package
+```
+
+### Option 2: Activate Venv First
+If you need to use `python` or `pip` directly, activate the venv in the same command:
+```bash
+source /Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/activate && python your_script.py
+```
+
+## Terminal Command Rules
+
+- **NEVER** run `python` or `pip` without either:
+  1. Using the full path to the venv interpreter, OR
+  2. Activating the venv first in the same command
+- When using `run_terminal_cmd`, prefer using the full Python path to avoid shell activation issues
+- For multi-line commands or scripts, activate the venv at the start:
+  ```bash
+  source /Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/activate && \
+  python your_script.py
+  ```

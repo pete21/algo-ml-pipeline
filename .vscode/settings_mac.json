@@ -1,0 +1,40 @@
+{
+    "python.defaultInterpreterPath": "<ENV_PATH>/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    "terminal.integrated.profiles.osx": {
+        "zsh (auto-venv)": {
+            "path": "/bin/zsh",
+            "args": [
+                "-c",
+                "source <ENV_PATH>/bin/activate; exec /bin/zsh"
+            ]
+        },
+        "bash (auto-venv)": {
+            "path": "/bin/bash",
+            "args": [
+                "-c",
+                "source <ENV_PATH>/bin/activate; exec /bin/bash"
+            ]
+        }
+    },
+    "terminal.integrated.defaultProfile.osx": "zsh (auto-venv)",
+    "terminal.integrated.env.osx": {
+        "VIRTUAL_ENV": "<ENV_PATH>",
+        "PATH": "<ENV_PATH>/bin:${env:PATH}"
+    },
+    "terminal.integrated.profiles.linux": {
+        "bash (auto-venv)": {
+            "path": "/usr/bin/bash",
+            "args": [
+                "-c",
+                "source <ENV_PATH>/bin/activate; exec /usr/bin/bash"
+            ]
+        }
+    },
+    "terminal.integrated.defaultProfile.linux": "bash (auto-venv)",
+    "terminal.integrated.env.linux": {
+        "VIRTUAL_ENV": "<ENV_PATH>",
+        "PATH": "<ENV_PATH>/bin:${env:PATH}"
+    }
+}

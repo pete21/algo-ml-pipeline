@@ -1,0 +1,21 @@
+---
+description: Automatically commit agent-made code changes after each response
+alwaysApply: true
+---
+
+# Agent Auto Commit
+
+After completing a user request, if you changed code or project files in that response, create a git commit automatically before sending the final reply.
+
+## Required Behavior
+
+- Trigger commits per interaction: each response with file changes must result in exactly one commit.
+- Do not commit when no files were changed.
+- Commit only files changed by the agent for the current response; do not include unrelated pre-existing local changes.
+- Stage files explicitly by path (avoid broad staging that can include unrelated edits).
+- Use a concise commit message that starts with `agent:` and describes the intent of the change.
+- If commit fails, report the error in the response and keep changes in the working tree.
+
+## Response Requirement
+
+When a commit is created, include the commit hash and message in the response.

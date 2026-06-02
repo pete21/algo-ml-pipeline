@@ -3,8 +3,21 @@ stages:
     cmd: python src/data/data_ingestion.py
     deps:
     - src/data/data_ingestion.py
+    - data/src/DAX40_USDT_USDT-1m-futures.parquet
     params:
-    - data_ingestion.test_size
+    - data_ingestion.timeframes
+    - data_ingestion.timeframe_minutes
+    - data_ingestion.timeframe_scalers
+    - data_ingestion.indexes
+    - data_ingestion.index_barrier
+    - data_ingestion.index_base
+    - data_ingestion.indexes_higher
+    - data_ingestion.file_name
+    - data_ingestion.high_time_col
+    - data_ingestion.low_time_col
+    - data_ingestion.high_time_col_wavelet
+    - data_ingestion.low_time_col_wavelet
+
     outs:
     - data/raw
 
@@ -12,46 +25,47 @@ stages:
   data_preprocessing:
     cmd: python src/data/data_preprocessing.py
     deps:
-    - data/raw/train.csv
-    - data/raw/test.csv
+    - data/raw/data_ohlc_features_1h.csv
+    - data/raw/data_ohlc_features_15m.csv
+    - data/raw/data_ohlc_features_5m.csv
     - src/data/data_preprocessing.py
     outs:
     - data/interim
 
 
   
-  model_building:
-    cmd: python src/model/model_building.py
-    deps:
-    - data/interim/train_processed.csv
-    - src/model/model_building.py
-    params:
-    - model_building.max_features
-    - model_building.ngram_range
-    - model_building.learning_rate
-    - model_building.max_depth
-    - model_building.n_estimators
-    outs:
-    - lgbm_model.pkl
-    - tfidf_vectorizer.pkl
+  # model_building:
+  #   cmd: python src/model/model_building.py
+  #   deps:
+  #   - data/interim/train_processed.csv
+  #   - src/model/model_building.py
+  #   params:
+  #   - model_building.max_features
+  #   - model_building.ngram_range
+  #   - model_building.learning_rate
+  #   - model_building.max_depth
+  #   - model_building.n_estimators
+  #   outs:
+  #   - lgbm_model.pkl
+  #   - tfidf_vectorizer.pkl
 
 
   
-  model_evaluation:
-    cmd: python src/model/model_evaluation.py
-    deps:
-    - lgbm_model.pkl
-    - tfidf_vectorizer.pkl
-    - data/interim/train_processed.csv
-    - data/interim/test_processed.csv
-    - src/model/model_evaluation.py
-    outs:
-    - experiment_info.json
+  # model_evaluation:
+  #   cmd: python src/model/model_evaluation.py
+  #   deps:
+  #   - lgbm_model.pkl
+  #   - tfidf_vectorizer.pkl
+  #   - data/interim/train_processed.csv
+  #   - data/interim/test_processed.csv
+  #   - src/model/model_evaluation.py
+  #   outs:
+  #   - experiment_info.json
 
 
   
-  model_registration:
-    cmd: python src/model/register_model.py
-    deps:
-    - experiment_info.json
-    - src/model/register_model.py
+  # model_registration:
+  #   cmd: python src/model/register_model.py
+  #   deps:
+  #   - experiment_info.json
+  #   - src/model/register_model.py

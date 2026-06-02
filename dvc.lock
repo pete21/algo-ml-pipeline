@@ -3,19 +3,82 @@ stages:
   data_ingestion:
     cmd: python src/data/data_ingestion.py
     deps:
+    - path: data/src/DAX40_USDT_USDT-1m-futures.parquet
+      hash: md5
+      md5: 0ba3995134c25fc6deaa374de36876c7
+      size: 25995129
     - path: src/data/data_ingestion.py
       hash: md5
-      md5: 42b20feb2b4f4ef249d691d6732fe5e4
-      size: 4220
+      md5: d28ba3152df74e17e5bf06e40914429a
+      size: 5838
     params:
       params.yaml:
-        data_ingestion.test_size: 0.2
+        data_ingestion.file_name: DAX40_USDT_USDT-{timeframe}-futures.parquet
+        data_ingestion.high_time_col: High
+        data_ingestion.high_time_col_wavelet: Close_wavelet
+        data_ingestion.index_barrier: 1
+        data_ingestion.index_base: 5
+        data_ingestion.indexes:
+        - 1
+        - 5
+        - 7
+        - 10
+        data_ingestion.indexes_higher:
+        - 7
+        - 10
+        data_ingestion.low_time_col: Low
+        data_ingestion.low_time_col_wavelet: Close_wavelet
+        data_ingestion.timeframe_minutes:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 10
+        - 15
+        - 20
+        - 30
+        - 60
+        - 120
+        - 240
+        - 1440
+        data_ingestion.timeframe_scalers:
+        - 0.22
+        - 0.44
+        - 0.63
+        - 0.77
+        - 0.89
+        - 1
+        - 1.4
+        - 1.7
+        - 2
+        - 2.4
+        - 3.4
+        - 4.8
+        - 6.8
+        - 9.6
+        data_ingestion.timeframes:
+        - 10s
+        - 1m
+        - 2m
+        - 3m
+        - 4m
+        - 5m
+        - 10m
+        - 15m
+        - 20m
+        - 30m
+        - 1h
+        - 2h
+        - 4h
+        - 1d
     outs:
     - path: data/raw
       hash: md5
-      md5: e13bcce40396cd334c8a7a334868166a.dir
-      size: 6919701
-      nfiles: 2
+      md5: 7c7f242af223f0f8db989ef50a8e0612.dir
+      size: 35573131
+      nfiles: 3
   data_preprocessing:
     cmd: python src/data/data_preprocessing.py
     deps:
