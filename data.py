@@ -4,7 +4,6 @@
 # In[1]:
 
 
-#!pip install quantreo
 #!pip install TA-Lib
 #!pip install hurst
 #!pip install feature-engine
@@ -284,7 +283,7 @@ p[10] = parameters
 # In[23]:
 
 
-def calculate_features(df, parameters, scaler, col_close="close", col_high="high", col_low="low"):
+def dynamic_features(df, parameters, scaler, col_close="close", col_high="high", col_low="low"):
 
     df = market_regime_features(df, col_close=col_close, col_high=col_high, col_low=col_low,
                          l1_fast=parameters['l1_fast'],l2_fast=parameters['l2_fast'],l3_fast=parameters['l3_fast'],
@@ -1650,8 +1649,7 @@ scores
 # In[ ]:
 
 
-# Import the Features Engineering Package from Quantreo
-import quantreo.features_engineering as fe
+import src.data_utils.features_engineering as fe
 
 # Import scikit-learn packages
 from sklearn.decomposition import KernelPCA

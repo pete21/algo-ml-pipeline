@@ -1,12 +1,10 @@
+import talib
+
 import numpy as np
 import pandas as pd
 from functools import lru_cache
-from src.data_utils.target_engineering.magnitude.returns import future_returns
-from src.data_utils.target_engineering.directional.sign import future_returns_sign
-from src.data_utils.target_engineering.directional.barriers import double_barrier_labeling
-from src.data_utils.target_engineering.directional.barriers import triple_barrier_labeling
-from src.data_utils.target_engineering.directional.quantile import quantile_label
-
+from src.data_utils.target_engineering.magnitude import future_returns
+from src.data_utils.target_engineering.directional import future_returns_sign, double_barrier_labeling, triple_barrier_labeling, quantile_label
 
 @lru_cache(maxsize=32)
 def target(df, candles_lookahead=15, avg_period_candles=8):
@@ -32,27 +30,27 @@ def target(df, candles_lookahead=15, avg_period_candles=8):
 @lru_cache(maxsize=4)
 def target_returns(df):
     # Compute the future log return over 3 periods
-    fut_ret = future_returns(df, window_size=5, log_return=True, close_col="Close").rename('fut_ret')
+    fut_ret = magnitude.future_returns(df, window_size=5, log_return=True, close_col="Close").rename('fut_ret')
 
     # Generate a directional label: 1 if return > 0, else 0
-    direction = future_returns_sign(df, window_size=5, close_col="Close").rename('direction')
+    direction = directional.future_returns_sign(df, window_size=5, close_col="Close").rename('direction')
 
     return fut_ret, direction
 
 @lru_cache(maxsize=4)
-def target_2barrier(df, tp=0.015, sl=-0.015):
-    return double_barrier_labeling(df, high_col="High", low_col="Low", open_col="Open", close_col="Close",
+def target_2barrier(df, tp=0.01, sl=-0.01):
+    return directional.double_barrier_labeling(df, high_col="High", low_col="Low", open_col="Open", close_col="Close",
                                                              high_time_col="High_time", low_time_col="Low_time",
                                                              tp=tp, sl=sl, buy=True).rename('target_2barrier')
 
 @lru_cache(maxsize=4)
-def target_3barrier(dftp=0.015, sl=-0.015):
-    return triple_barrier_labeling(df, 30, high_col="High", low_col="Low", open_col="Open", close_col="Close",
+def target_3barrier(dftp=0.01, sl=-0.01):
+    return directional.triple_barrier_labeling(df, 30, high_col="High", low_col="Low", open_col="Open", close_col="Close",
                                                              high_time_col="High_time", low_time_col="How_time",
                                                              tp=tp, sl=sl, buy=True).rename('target_3barrier')
 
 @lru_cache(maxsize=4)
 def target_quantile(df, col='pct_change', upper_quantile_level=0.67, lower_quantile_level=0.33):
-    return quantile_label(df, col=col, upper_quantile_level=upper_quantile_level, lower_quantile_level=lower_quantile_level).rename('target_quantile')
+    return directional.quantile_label(df, col=col, upper_quantile_level=upper_quantile_level, lower_quantile_level=lower_quantile_level).rename('target_quantile')
 
 

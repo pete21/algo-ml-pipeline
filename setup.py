@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 
 setup(
-    name = 'forex_predictor',
+    name = 'algo-ml-pipeline',
     version= '1.0.0',
     author= 'PiotrN',
     author_email= 'piotr.nazarewicz@gmail.com',

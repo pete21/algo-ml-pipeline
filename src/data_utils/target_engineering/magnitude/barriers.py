@@ -13,8 +13,8 @@ def _fast_barrier_buy(
     high_time_arr: np.ndarray,
     low_time_arr: np.ndarray,
     time_arr: np.ndarray,
-    tp: float = 0.015,
-    sl: float = -0.015,
+    tp: float = 0.01,
+    sl: float = -0.01,
 ) -> float:
     n = len(open_arr)
     for j in range(n):
@@ -57,8 +57,8 @@ def _fast_barrier_sell(
     high_time_arr: np.ndarray,
     low_time_arr: np.ndarray,
     time_arr: np.ndarray,
-    tp: float = 0.015,
-    sl: float = -0.015,
+    tp: float = 0.01,
+    sl: float = -0.01,
 ) -> float:
     n = len(open_arr)
     for j in range(n):
@@ -100,8 +100,8 @@ def _fast_ind_barrier(
     high_time_arr: np.ndarray,
     low_time_arr: np.ndarray,
     time_arr: np.ndarray,
-    tp: float = 0.015,
-    sl: float = -0.015,
+    tp: float = 0.01,
+    sl: float = -0.01,
     buy: bool = True,
 ) -> float:
     if buy:
@@ -121,8 +121,8 @@ def continuous_barrier_labeling(
     low_col: str = "low",
     high_time_col: str = "high_time",
     low_time_col: str = "low_time",
-    tp: float = 0.015,
-    sl: float = -0.015,
+    tp: float = 0.01,
+    sl: float = -0.01,
     buy: bool = True,
 ) -> pd.Series:
     """
@@ -148,9 +148,9 @@ def continuous_barrier_labeling(
     low_time_col : str, optional
         Column name for the timestamp when the low occurred (default is 'low_time').
     tp : float, optional
-        Take Profit threshold, as a relative change from open price (default is 0.015).
+        Take Profit threshold, as a relative change from open price (default is 0.01).
     sl : float, optional
-        Stop Loss threshold, as a relative change from open price (default is -0.015).
+        Stop Loss threshold, as a relative change from open price (default is -0.01).
     buy : bool, optional
         Whether to simulate a long position (True) or short position (False). Default is True.
 
@@ -161,7 +161,7 @@ def continuous_barrier_labeling(
         - Positive values: TP was hit first.
         - Negative values: SL was hit first.
         - Zero: no barrier hit within the window or data ran out.
-        The result is shifted by one row to prevent look-ahead bias.
+        The result is shifted by one row to prevent look-ahead bias.    (??? not sure about this)
     """
     df_copy = df.copy()
 
@@ -218,6 +218,7 @@ def continuous_barrier_labeling(
             label = 0.0
         results.append(label)
 
-    label = pd.Series(results, index=df.index).shift(-1)
-    label.iloc[-1] = 0
+    # label = pd.Series(results, index=df.index).shift(-1)
+    # label.iloc[-1] = 0
+    label = pd.Series(results, index=df.index)
     return label

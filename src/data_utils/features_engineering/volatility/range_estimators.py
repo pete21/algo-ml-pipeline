@@ -1,10 +1,10 @@
 import numpy as np
 import math
 import pandas as pd
-# from numba import njit
+from numba import njit
 
 
-# @njit(nogil=True)
+@njit(nogil=True)
 def _rogers_satchell_estimator(high, low, open_, close, window_size):
     n = high.shape[0]
     vol = np.empty(n)
@@ -79,7 +79,7 @@ def rogers_satchell_volatility(
     return series
 
 
-# @njit(nogil=True)
+@njit(nogil=True)
 def _parkinson_estimator(high, low, window_size):
     """
     Compute Parkinson's volatility.md estimator over a rolling window.
@@ -160,7 +160,7 @@ def parkinson_volatility(
     return series
 
 
-# @njit(nogil=True)
+@njit(nogil=True)
 def _yang_zhang_estimator(high, low, open_, close, window_size, k=0.34):
     """
     Compute the Yang-Zhang volatility.md estimator using a single-pass approach,

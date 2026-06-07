@@ -1,8 +1,7 @@
 import talib
 from hurst import compute_Hc
 from scipy.signal import hilbert
-
-import math
+from math import exp
 import numpy as np
 # import polars as pl
 import pandas as pd
@@ -10,27 +9,25 @@ from pandas import DataFrame, Series
 #from functools import lru_cache
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import StandardScaler
-# import numba
-import pywt
+import numba
+from src.data_utils.wavelet import wavelet_denoising_rolling
 from pykalman import KalmanFilter
-from src.lib.features_engineering.volatility.range_estimators import close_to_close_volatility
-from src.lib.target_engineering.directional.barriers import double_barrier_labeling
-from src.lib.features_engineering.volatility.range_estimators import rogers_satchell_volatility
-from src.lib.features_engineering.volatility.range_estimators import parkinson_volatility
-from src.lib.features_engineering.volatility.range_estimators import yang_zhang_volatility
-from src.lib.features_engineering.trend.moving_averages import kama
-from src.lib.features_engineering.trend.slopes import linear_slope
-
-
-wavelet = pywt.Wavelet('db6')
+from src.data_utils.features_engineering.volatility.close_to_close import close_to_close_volatility
+from src.data_utils.target_engineering.directional.barriers import double_barrier_labeling, triple_barrier_labeling
+from src.data_utils.features_engineering.volatility.range_estimators import rogers_satchell_volatility
+from src.data_utils.features_engineering.volatility.range_estimators import parkinson_volatility
+from src.data_utils.features_engineering.volatility.range_estimators import yang_zhang_volatility
+import src.data_utils.features_engineering.trend as trend
+import src.data_utils.features_engineering.math as math
 
 
 ### Target
 
-def build_target(df, close_col="close", high_col="high", low_col="low", high_time_col="high_time",
+def build_target(df, open_col="open", high_col="high", low_col="low", high_time_col="high_time",
     low_time_col="low_time", tp=0.0025, ema_period=10, ema_reversed_period=40, threshold_long=0.75, threshold_short=0.25):
     
-    labeling_binary = double_barrier_labeling(df, close_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
+    # labeling_binary = double_barrier_labeling(df, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
+    labeling_binary = triple_barrier_labeling(df, 4, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
 
     labeling_ema = talib.EMA(labeling_binary, ema_period)
 
@@ -184,21 +181,21 @@ p‑value ≪ 0.05  →  Reject the unit‑root null ⇒ series is stati
 p‑value ≈ 1  →  cannot reject null ⇒ behaves like a random walk.
 Monitor the rolling statistic (adf_stat) to see how strongly the unit‑root hypothesis is rejected (more negative ⇒ stronger evidence of stationarity).
 
-df["adf_stat"], df["adf_pvalue"] = fe.math.adf_test(df, col="close", window_size=80, lags=10, regression="ct")
+df["adf_stat"], df["adf_pvalue"] = math.adf_test(df, col="close", window_size=80, lags=10, regression="ct")
 '''
 
 '''
 ARCH Test
 
 df["returns"] = df["close"].pct_change(1)
-df["arch_stat"], df["arch_pvalue"] = fe.math.arch_test(df, col="returns", window_size=60, lags=10)
+df["arch_stat"], df["arch_pvalue"] = math.arch_test(df, col="returns", window_size=60, lags=10)
 '''
 
 '''
 Skewness
 
 df["returns"] = df["close"].pct_change(1)
-df["skew"] = fe.math.skewness(df=df, col="returns", window_size=60)
+df["skew"] = math.skewness(df=df, col="returns", window_size=60)
 df["skew"]
 '''
 
@@ -206,7 +203,7 @@ df["skew"]
 Kurtosis
 
 df["returns"] = df["close"].pct_change(1)
-df["kurt"] = fe.math.kurtosis(df=df, col="returns", window_size=60)
+df["kurt"] = math.kurtosis(df=df, col="returns", window_size=60)
 df["kurt"]
 '''
 
@@ -242,20 +239,20 @@ def hurst_calc_change(df: pd.DataFrame, col: str, window_size: int = 100) -> pd.
     # )
 
 
-#df["hurst"] = fe.math.hurst(df=df, col="Close", window_size=200)
+#df["hurst"] = math.hurst(df=df, col="Close", window_size=200)
 #df["hurst"]
 
 
 '''
 # Compute the Features
 df["returns"] = df["close"].pct_change(1)
-df["vol"] = fe.volatility.parkinson_volatility(df=df, window_size=30)
-df["skew"] = fe.math.skewness(df=df, col="returns", window_size=30)
+df["vol"] = volatility.parkinson_volatility(df=df, window_size=30)
+df["skew"] = math.skewness(df=df, col="returns", window_size=30)
 
 # Compute the Entropy
-df["entropy_returns"] = fe.math.sample_entropy(df=df, col="returns", window_size=200)
-df["entropy_vol"] = fe.math.sample_entropy(df=df, col="vol", window_size=200)
-df["entropy_skew"] = fe.math.sample_entropy(df=df, col="skew", window_size=200)
+df["entropy_returns"] = math.sample_entropy(df=df, col="returns", window_size=200)
+df["entropy_vol"] = math.sample_entropy(df=df, col="vol", window_size=200)
+df["entropy_skew"] = math.sample_entropy(df=df, col="skew", window_size=200)
 '''
 
 ### Trend
@@ -295,18 +292,18 @@ def trend_regression(df, col='Close', trend_slope_window=10):
 
 '''
 df["returns"] = df["close"].pct_change(1)
-df["kurt"] = fe.math.kurtosis(df=df, col="returns", window_size=60)
+df["kurt"] = math.kurtosis(df=df, col="returns", window_size=60)
 df["kurt"]
 '''
 
 '''
-df["kama"] = fe.trend.kama(df=df, col="Close", l1=10, l2=2, l3=30)
+df["kama"] = trend.kama(df=df, col="Close", l1=10, l2=2, l3=30)
 
 df["kama"]
 '''
 
 '''
-df["linear_slope_1M"] = fe.trend.linear_slope(df, col='close', window_size=30*6) # x6 because we have 4-hour data
+df["linear_slope_1M"] = trend.linear_slope(df, col='close', window_size=30*6) # x6 because we have 4-hour data
 df["linear_slope_1M"]
 '''
 
@@ -360,30 +357,30 @@ def hilbert_dominant_cycle(price_series):
 def volatility(df, rogers_satchell_volatility_window, parkinson_vol_window, yang_zhang_vol_window, ctc_vol_window,
                high_col="High", low_col="Low", open_col="Open", close_col="Close"):
     # Calculate Rogers-Satchell volatility.md estimator using numpy operations with Numba acceleration.
-    rogers_satchell_volatility = rogers_satchell_volatility(df=df, high_col=high_col,
+    rogers_satchell_vol = rogers_satchell_volatility(df=df, high_col=high_col,
                                                                                        low_col=low_col,
                                                                                        open_col=open_col,
                                                                                        close_col=close_col,
-                                                                                       window_size=rogers_satchell_volatility_window) * 1000 #,
+                                                                                       window_size=rogers_satchell_volatility_window) * 1000-1 #,
                                            #index=df.index, dtype=np.float16, name='rogers_satchell_volatility')
 
     # Calculate Parkinson's volatility.md estimator using numpy operations with Numba acceleration.
     parkinson_vol = parkinson_volatility(df=df, high_col=high_col, low_col=low_col,
-                                                                    window_size=parkinson_vol_window) * 1000 #,
+                                                                    window_size=parkinson_vol_window) * 1000-1 #,
                                            #index=df.index, dtype=np.float16, name='rogers_satchell_volatility')
 
     # Compute Yang-Zhang Volatility over a rolling window
     yang_zhang_vol = yang_zhang_volatility(df=df, window_size=yang_zhang_vol_window,
                                                                       high_col=high_col, low_col=low_col,
-                                                                      open_col=open_col, close_col=close_col) * 1000 #,
+                                                                      open_col=open_col, close_col=close_col) * 1000-1 #,
                                            #index=df.index, dtype=np.float16, name='rogers_satchell_volatility')
 
     # Close-to-close volatility
     ctc_vol = close_to_close_volatility(df=df, close_col=close_col,
-                                                                   window_size=ctc_vol_window) * 1000 #,
+                                                                   window_size=ctc_vol_window) * 1000-1 #,
                                            #index=df.index, dtype=np.float16, name='rogers_satchell_volatility')
     
-    return rogers_satchell_volatility, parkinson_vol, yang_zhang_vol, ctc_vol
+    return rogers_satchell_vol, parkinson_vol, yang_zhang_vol, ctc_vol
 
 ### Market regime
 
@@ -426,8 +423,8 @@ def kama_market_regime(df, col="Close", l1_fast=50, l2_fast=2, l3_fast=30, l1_sl
     """
 
     # Calculate both KAMA values
-    kama_fast = fe.trend.kama(df, col, l1=l1_fast, l2=l2_fast, l3=l3_fast)
-    kama_slow = fe.trend.kama(df, col, l1=l1_slow, l2=l2_slow, l3=l3_slow)
+    kama_fast = trend.kama(df, col, l1=l1_fast, l2=l2_fast, l3=l3_fast)
+    kama_slow = trend.kama(df, col, l1=l1_slow, l2=l2_slow, l3=l3_slow)
 
     # Difference & regime detection
     kama_diff_pct = (kama_fast - kama_slow)/kama_slow * 100
@@ -571,12 +568,14 @@ def calculate_dc(df, col_close="Close", col_high="High", col_low="Low", threshol
     for row in dfc.itertuples():
 
         # Uplate min & max prices
-
-        if getattr(row, col_high) > max_price:
-            max_price = getattr(row, col_high)
+        h = getattr(row, col_high)
+        l = getattr(row, col_low)
+        c = getattr(row, col_close)
+        if h > max_price:
+            max_price = h
             idx_max = row.Index
-        if getattr(row, col_low) < min_price:
-            min_price = getattr(row, col_low)
+        if l < min_price:
+            min_price = l
             idx_min = row.Index
             
         #max_price = dfc[col_high].iloc[last_index:i].max()
@@ -586,79 +585,79 @@ def calculate_dc(df, col_close="Close", col_high="High", col_low="Low", threshol
 
         
         # Add the DC event with the right index in the opposite direction
-        if (last_dc_direction != 1) & ((getattr(row, col_close)-min_price)/min_price>=threshold): #(dc_price_min == 1):
-            dc_events_up.append([idx_min, row.Index])
-            dc_events.append([idx_min, row.Index])
+        if ((c-min_price)/min_price>=threshold) and (last_dc_direction != 1): #(dc_price_min == 1):
+            dc_events_up.append([idx_min, row.Index, (c-min_price)/min_price])
+            dc_events.append([idx_min, row.Index, (c-min_price)/min_price])
             if up_down_alternating:
                 last_dc_direction = 1
             last_index=row.Index
-            max_price = getattr(row, col_high)
-            min_price = getattr(row, col_low)
+            max_price = h
+            min_price = l
             idx_min = last_index
             idx_max = last_index
 
-        elif (last_dc_direction != -1) & ((getattr(row, col_close)-max_price)/max_price<=-threshold): #(dc_price_max == -1):
-            dc_events_down.append([idx_max, row.Index])
-            dc_events.append([idx_max, row.Index])
+        if ((max_price-c)/max_price>=threshold) and (last_dc_direction != -1): #(dc_price_max == -1):
+            dc_events_down.append([idx_max, row.Index, (c-max_price)/max_price])
+            dc_events.append([idx_max, row.Index, (c-max_price)/max_price])
             if up_down_alternating:
                 last_dc_direction = -1
             last_index=row.Index
-            max_price = getattr(row, col_high)
-            min_price = getattr(row, col_low)
+            max_price = h
+            min_price = l
             idx_min = last_index
             idx_max = last_index
 
     return dc_events_up, dc_events_down, dc_events
 
 
-def calculate_trend(df, dc_events_down, dc_events_up):
-    """
-    Compute the DC + OS period (trend) using the DC event lists
-    """
+# def calculate_trend(df, dc_events_down, dc_events_up):
+#     """
+#     Compute the DC + OS period (trend) using the DC event lists
+#     """
 
-    # Initialize the variables
-    trend_events_up = []
-    trend_events_down = []
-    len_events_down = len(dc_events_down)
-    len_events_up = len(dc_events_up)
+#     # Initialize the variables
+#     trend_events_up = []
+#     trend_events_down = []
+#     len_events_down = len(dc_events_down)
+#     len_events_up = len(dc_events_up)
 
-    # Verify which event occured first (upward or downward movement)
+#     # Verify which event occured first (upward or downward movement)
 
-    # If the first event is a downward event
-    if dc_events_down[0][0] < dc_events_up[0][0]:
+#     # If the first event is a downward event
+#     if dc_events_down[0][0] < dc_events_up[0][0]:
 
-        # Iterate on the index
-        for i in range(len_events_down):
-            # Calculate the start and end for each trend
-            if i == len_events_up:
-                trend_events_down.append([dc_events_down[i][1], len(df) - 1])
-                break
-            else:
-                trend_events_down.append([dc_events_down[i][1], dc_events_up[i][0]])
+#         # Iterate on the index
+#         for i in range(len_events_down):
+#             # Calculate the start and end for each trend
+#             if i == len_events_up:
+#                 trend_events_down.append([dc_events_down[i][1], len(df) - 1])
+#                 break
+#             else:
+#                 trend_events_down.append([dc_events_down[i][1], dc_events_up[i][0]])
 
-            if i == len_events_down - 1:
-                trend_events_up.append([dc_events_up[i][1], len(df) - 1])
-            else:
-                trend_events_up.append([dc_events_up[i][1], dc_events_down[i + 1][0]])
+#             if i == len_events_down - 1:
+#                 trend_events_up.append([dc_events_up[i][1], len(df) - 1])
+#             else:
+#                 trend_events_up.append([dc_events_up[i][1], dc_events_down[i + 1][0]])
 
-    # If the first event is a upward event
-    else:
+#     # If the first event is a upward event
+#     else:
 
-        # Iterate on the index
-        for i in range(len_events_up):
-            # Calculate the start and end for each trend
-            if i == len_events_down:
-                trend_events_up.append([dc_events_up[i][1], len(df) - 1])
-                break
-            else:
-                trend_events_up.append([dc_events_up[i][1], dc_events_down[i][0]])
+#         # Iterate on the index
+#         for i in range(len_events_up):
+#             # Calculate the start and end for each trend
+#             if i == len_events_down:
+#                 trend_events_up.append([dc_events_up[i][1], len(df) - 1])
+#                 break
+#             else:
+#                 trend_events_up.append([dc_events_up[i][1], dc_events_down[i][0]])
 
-            if i == len_events_up - 1:
-                trend_events_down.append([dc_events_down[i][1], len(df) - 1])
-            else:
-                trend_events_down.append([dc_events_down[i][1], dc_events_up[i + 1][0]])
+#             if i == len_events_up - 1:
+#                 trend_events_down.append([dc_events_down[i][1], len(df) - 1])
+#             else:
+#                 trend_events_down.append([dc_events_down[i][1], dc_events_up[i + 1][0]])
 
-    return trend_events_down, trend_events_up
+#     return trend_events_down, trend_events_up
 
 
 def get_dc_price(df, dc_events, col_close="Close"):
@@ -703,10 +702,12 @@ def DC_market_regime(df, col_close="Close", col_high="High", col_low="Low", thre
     market_regime = np.zeros(len(df))
 
     for event in dc_events_up:
-        market_regime[event[0]]=1
+        # market_regime[event[0]]=1              # lookahead bias
+        market_regime[event[1]]=event[2]*100
     for event in dc_events_down:
-        market_regime[event[0]]=-1
-
+        # market_regime[event[0]]=-1              # lookahead bias
+        market_regime[event[1]]=event[2]*100
+    
 #    for event in trend_events_up:
 #        market_regime.iloc[event[0]]=0.75
 #    for event in trend_events_down:
@@ -824,7 +825,7 @@ def market_regime_features(df, col_close="Close", col_high="High", col_low="Low"
                            displacement_hull_slope_period=10, gap_lookback=2, gap_hull_period=30, gap_hull_slope_period=20, ha_sign_ma_period=10):
     #print(datetime.now().strftime('%H:%M:%S'))
 
-    df["adf_stat"], df["adf_pvalue"] = fe.math.adf_test(df, col=col_close, window_size=40, lags=10, regression="ct")        #10s
+    df["adf_stat"], df["adf_pvalue"] = math.adf_test(df, col=col_close, window_size=40, lags=10, regression="ct")        #10s
 
     df['dc_market_regime'] = DC_market_regime(df, col_close=col_close, col_high=col_high, col_low=col_low, threshold=market_regime_threshold)        #40s
     df['dc_market_regime_ema'] = talib.EMA(df.loc[:,"dc_market_regime"], dc_market_regime_period)
@@ -887,9 +888,9 @@ def market_regime_features(df, col_close="Close", col_high="High", col_low="Low"
     )
 
     # Compute the percentage of closing prices in different range zones
-#    df["0_to_25"] = fe.candle.price_distribution(df, col=col_close, window_size=price_distribution_window_size, start_percentage=0.0, end_percentage=price_distribution_percentile_threshold)        #1s
-#    df["25_to_75"] = fe.candle.price_distribution(df, col=col_close, window_size=price_distribution_window_size, start_percentage=price_distribution_percentile_threshold, end_percentage=1-price_distribution_percentile_threshold)
-#    df["75_to_100"] = fe.candle.price_distribution(df, col=col_close, window_size=price_distribution_window_size, start_percentage=1-price_distribution_percentile_threshold, end_percentage=1.0)
+#    df["0_to_25"] = candle.price_distribution(df, col=col_close, window_size=price_distribution_window_size, start_percentage=0.0, end_percentage=price_distribution_percentile_threshold)        #1s
+#    df["25_to_75"] = candle.price_distribution(df, col=col_close, window_size=price_distribution_window_size, start_percentage=price_distribution_percentile_threshold, end_percentage=1-price_distribution_percentile_threshold)
+#    df["75_to_100"] = candle.price_distribution(df, col=col_close, window_size=price_distribution_window_size, start_percentage=1-price_distribution_percentile_threshold, end_percentage=1.0)
 
     #print(datetime.now().strftime('%H:%M:%S'))
     return df
@@ -905,12 +906,12 @@ def numpy_fill(arr):
 
 def exponential_growth(c, k, t):
     """Calculate the amount after a certain time with exponential growth."""
-    return c * math.exp(k * t)
+    return c * exp(k * t)
 def exponential_decay(c, k, t):
     """Calculate the amount after a certain time with exponential decay."""
-    return c * math.exp(-k * t)
+    return c * exp(-k * t)
 
-# @numba.jit(nopython=True) # Set "nopython" mode for best performance, equivalent to @njit
+@numba.jit(nopython=True) # Set "nopython" mode for best performance, equivalent to @njit
 def heikenashi_open(ha_close, ha_open_0=0):
     n = len(ha_close)
     ha_open = np.full(n, ha_open_0, dtype=np.float32)
@@ -919,7 +920,7 @@ def heikenashi_open(ha_close, ha_open_0=0):
     return ha_open
 
 
-# @numba.jit(nopython=True) # Set "nopython" mode for best performance, equivalent to @njit
+@numba.jit(nopython=True) # Set "nopython" mode for best performance, equivalent to @njit
 def supertrend(dataframe: pd.DataFrame, multiplier, atr_period=14, close_col="close", high_col="high", low_col="low"):
 
 #    h_l = dataframe[high_col] - dataframe[low_col]
@@ -1099,49 +1100,6 @@ def hull(dataframe, timeperiod):
             int(round(np.sqrt(timeperiod))),
         )
 
-
-# Apply wavelet transform
-def wavelet_transform(data, lvl=8):
-    coeff = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
-    return coeff
-
-# Inverse wavelet transform
-def inverse_wavelet_transform(coeffs, lvl=8, clear_levels=4):
-    # remove last <clear_levels> finer details
-    for i in range(clear_levels):
-        coeffs[-i-1] = np.zeros(coeffs[-i-1].shape)
-    return pywt.waverec(coeffs, wavelet, mode='symmetric')
-
-def wavelet_denoising(data, wavelet='db4', lvl=8):
-    coeffs = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
-    threshold = np.std(coeffs[-lvl])
-    coeffs = [pywt.threshold(c, threshold, mode='soft', substitute=0) for c in coeffs]
-    denoised_data = pywt.waverec(coeffs, wavelet)
-    #print("Original data: {}".format(data))
-    #print("Denoised data using wavelet {}: {}".format(wavelet, denoised_data))
-    return denoised_data
-
-def wavelet_denoising2(data, wavelet='db4', lvl=8, clear_levels=4, threshold=None):
-    coeffs = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
-    if threshold is None:
-        threshold = np.std(coeffs[0])
-    for i in range(clear_levels):
-        coeffs[-i-1] = pywt.threshold(coeffs[-i-1], threshold, mode='garrote', substitute=0)     # garrote
-    denoised_data = pywt.waverec(coeffs, wavelet)
-    #print("Original data: {}".format(data))
-    #print("Denoised data using wavelet {}: {}".format(wavelet, denoised_data))
-    return denoised_data
-
-def wavelet_denoising_rolling(data, wavelet='db4', lvl=8, clear_levels=4, threshold=None):
-    coeffs = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
-    if threshold is None:
-        threshold = np.std(coeffs[0])
-    for i in range(clear_levels):
-        coeffs[-i-1] = pywt.threshold(coeffs[-i-1], threshold, mode='garrote', substitute=0)     # garrote
-    denoised_data = pywt.waverec(coeffs, wavelet)
-    #print("Original data: {}".format(data))
-    #print("Denoised data using wavelet {}: {}".format(wavelet, denoised_data))
-    return denoised_data[-1]
 
 def kalman_filter(data, initial_state):
     kf = KalmanFilter(transition_matrices = [1],

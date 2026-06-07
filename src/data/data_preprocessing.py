@@ -3,8 +3,8 @@ import numpy as np
 import os
 import logging
 
-from src.lib.static_features import static_features
-from src.lib.utils import get_dates, load_params
+from src.data_utils.static_features import static_features
+from src.data_utils.utils import get_dates, load_params
 
 # logging configuration
 logger = logging.getLogger('data_preprocessing')
@@ -28,18 +28,16 @@ def load_data(data_path: str, params: dict) -> dict:
     """Load the data from the data/raw directory."""
     try:
         data = {}
-        data[params['data_preprocessing']['index_base']] = pd.read_csv(f'{data_path}/raw/data_ohlc_features_{params['data_preprocessing']['timeframes'][params['data_preprocessing']['index_base']]}.csv', parse_dates=True, index_col='date')
+        data[params['data_preprocessing']['index_base']] = pd.read_csv(os.path.join(data_path, params['data_preprocessing']['file_name'].format(timeframe=params['data_preprocessing']['timeframes'][params['data_preprocessing']['index_base']])), parse_dates=True, index_col='date')
         data[params['data_preprocessing']['index_base']]["high_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["high_time"])
         data[params['data_preprocessing']['index_base']]["low_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["low_time"])
         for i in params['data_preprocessing']['indexes_higher']:
-            data[i] = pd.read_csv(f'{data_path}/raw/data_ohlc_features_{params['data_preprocessing']['timeframes'][i]}.csv', parse_dates=True, index_col='date')
-        for i in (params['data_preprocessing']['indexes_higher']+[params['data_preprocessing']['index_base']]):
+            data[i] = pd.read_csv(os.path.join(data_path, params['data_preprocessing']['file_name'].format(timeframe=params['data_preprocessing']['timeframes'][i])), parse_dates=True, index_col='date')
             data[i]["date_merge"] = pd.to_datetime(data[i]["date_merge"])
         return data
     except Exception as e:
         logger.error('Failed to load the data: %s', e)
         raise
-
 
 
 def preprocess_data(data: dict, params: dict) -> dict:
@@ -73,21 +71,19 @@ def preprocess_data(data: dict, params: dict) -> dict:
 
 def save_data(data: dict, params: dict, data_path: str) -> None:
     """Save the processed dataset."""
-    try:
-        interim_data_path = os.path.join(data_path, 'interim')
-        logger.debug(f"Creating directory {interim_data_path}")
-        
-        os.makedirs(interim_data_path, exist_ok=True)  # Ensure the directory is created
-        logger.debug(f"Directory {interim_data_path} created or already exists")
+    try:     
+        os.makedirs(data_path, exist_ok=True)  # Ensure the directory is created
+        logger.debug(f"Directory {data_path} created or already exists")
 
         for i in params['data_preprocessing']['indexes_higher']:
-            data[i].to_csv(f'data_static_features_{params['data_preprocessing']['timeframes'][i]}.csv')
+            data[i].drop(columns=['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos'], inplace=True)
+            data[i].to_csv(os.path.join(data_path, f'data_static_features_{params['data_preprocessing']['timeframes'][i]}.csv'), index=True)
 
-        data[params['data_preprocessing']['index_base']].to_csv(os.path.join(interim_data_path, f"data_static_features_{params['data_preprocessing']['index_base']}.csv"), index=False)
-        data[params['data_preprocessing']['index_base']].isnull().sum().to_csv(os.path.join(interim_data_path, 'nulls.csv'))
-        data[params['data_preprocessing']['index_base']].isin([np.inf, -np.inf]).sum().to_csv(os.path.join(interim_data_path, 'inf.csv'))
+        data[params['data_preprocessing']['index_base']].to_csv(os.path.join(data_path, f"data_static_features_{params['data_preprocessing']['timeframes'][params['data_preprocessing']['index_base']]}.csv"), index=True)
+        data[params['data_preprocessing']['index_base']].isnull().sum().to_csv(os.path.join(data_path, 'nulls.csv'))
+        data[params['data_preprocessing']['index_base']].isin([np.inf, -np.inf]).sum().to_csv(os.path.join(data_path, 'inf.csv'))
 
-        logger.debug(f"Processed data saved to {interim_data_path}")
+        logger.debug(f"Processed data saved to {data_path}")
     except Exception as e:
         logger.error(f"Error occurred while saving data: {e}")
         raise
@@ -95,19 +91,18 @@ def save_data(data: dict, params: dict, data_path: str) -> None:
 def main():
     try:
         logger.debug("Starting data preprocessing...")
-        data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../data')
 
         params = load_params(params_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../params.yaml'), logger=logger)
 
         # Fetch the data from data/raw
-        data = load_data(data_path=data_path+'/raw', params=params)
+        data = load_data(data_path=params['data_preprocessing']['data_path'], params=params)
         logger.debug('Data loaded successfully')
 
         # Preprocess the data
         data = preprocess_data(data, params)
 
         # Save the processed data
-        save_data(data, data_path=data_path)
+        save_data(data, params, data_path=params['data_preprocessing']['data_path_dest'])
     except Exception as e:
         logger.error('Failed to complete the data preprocessing process: %s', e)
         print(f"Error: {e}")

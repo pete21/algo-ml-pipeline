@@ -3,8 +3,10 @@ stages:
     cmd: python src/data/data_ingestion.py
     deps:
     - src/data/data_ingestion.py
-    - data/src/DAX40_USDT_USDT-1m-futures.parquet
+    - ${data_ingestion.data_path}/${data_ingestion.ticker}-${data_ingestion.timeframe}-futures.parquet
     params:
+    - data_ingestion.data_path
+    - data_ingestion.ticker
     - data_ingestion.timeframes
     - data_ingestion.timeframe_minutes
     - data_ingestion.timeframe_scalers
@@ -25,29 +27,43 @@ stages:
   data_preprocessing:
     cmd: python src/data/data_preprocessing.py
     deps:
-    - data/raw/data_ohlc_features_1h.csv
-    - data/raw/data_ohlc_features_15m.csv
-    - data/raw/data_ohlc_features_5m.csv
+    - ${data_preprocessing.data_path}/data_ohlc_features_1h.csv
+    - ${data_preprocessing.data_path}/data_ohlc_features_15m.csv
+    - ${data_preprocessing.data_path}/data_ohlc_features_5m.csv
     - src/data/data_preprocessing.py
+    params:
+    - data_preprocessing.data_path
+    - data_preprocessing.index_base
+    - data_preprocessing.indexes_higher
+    - data_preprocessing.timeframes
+    - data_preprocessing.timeframe_scalers
+    - data_preprocessing.file_name
     outs:
     - data/interim
 
 
   
-  # model_building:
-  #   cmd: python src/model/model_building.py
-  #   deps:
-  #   - data/interim/train_processed.csv
-  #   - src/model/model_building.py
-  #   params:
-  #   - model_building.max_features
-  #   - model_building.ngram_range
-  #   - model_building.learning_rate
-  #   - model_building.max_depth
-  #   - model_building.n_estimators
-  #   outs:
-  #   - lgbm_model.pkl
-  #   - tfidf_vectorizer.pkl
+  model_building:
+    cmd: python src/model/model_building.py
+    deps:
+    - ${model_building.data_path}/data_static_features_1h.csv
+    - ${model_building.data_path}/data_static_features_15m.csv
+    - ${model_building.data_path}/data_static_features_5m.csv
+    - src/model/model_building.py
+    params:
+    - model_building.data_path
+    - model_building.models_path
+    - model_building.timeframe
+    - model_building.version
+    - model_building.index_base
+    - model_building.indexes_higher
+    - model_building.timeframes
+    - model_building.timeframe_scalers
+    - model_building.file_name
+    - model_building.list_X
+    - model_building.col_y
+    outs:
+    - ${model_building.models_path}/model_params_${model_building.timeframe}_v${model_building.version}.json
 
 
   

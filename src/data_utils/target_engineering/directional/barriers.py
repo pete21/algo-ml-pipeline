@@ -1,6 +1,6 @@
 import pandas as pd
-from ..magnitude import continuous_barrier_labeling
-
+import numpy as np
+from src.data_utils.target_engineering.magnitude.barriers import continuous_barrier_labeling
 
 def double_barrier_labeling(
     df: pd.DataFrame,
@@ -9,8 +9,8 @@ def double_barrier_labeling(
     low_col: str = "low",
     high_time_col: str = "high_time",
     low_time_col: str = "low_time",
-    tp: float = 0.015,
-    sl: float = -0.015,
+    tp: float = 0.01,
+    sl: float = -0.01,
     buy: bool = True,
 ) -> pd.Series:
     """
@@ -54,7 +54,7 @@ def double_barrier_labeling(
         buy=buy,
     )
 
-    labels = continuous.apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
+    labels = continuous.apply(lambda x: np.sign(x))
     labels.name = "barrier_label"
     return labels
 
@@ -67,8 +67,8 @@ def triple_barrier_labeling(
     low_col: str = "low",
     high_time_col: str = "high_time",
     low_time_col: str = "low_time",
-    tp: float = 0.015,
-    sl: float = -0.015,
+    tp: float = 0.01,
+    sl: float = -0.01,
     buy: bool = True,
 ) -> pd.Series:
     """
@@ -116,7 +116,7 @@ def triple_barrier_labeling(
     def label_fn(x):
         if abs(x) > max_duration_h:
             return 0
-        return 1 if x > 0 else -1 if x < 0 else 0
+        return np.sign(x)
 
     labels = durations.apply(label_fn)
     labels.name = "triple_barrier_label"

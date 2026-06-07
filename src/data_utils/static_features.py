@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
-from src.lib.features import candle_information, cycle, diff_transform, heikenashi_open, hurst_calc_change, volatility
+from src.data_utils.features import candle_information, cycle, diff_transform, heikenashi_open, hurst_calc_change, volatility
 import talib
-from src.lib.wavelet import wavelet_denoising_rolling
-import oryon.features as fe
-import datetime
+from src.data_utils.wavelet import wavelet_denoising_rolling
+import src.data_utils.features_engineering.math as math
+
+from datetime import datetime, date
 
 def sliding_elementwise_mult(values: np.ndarray, weights: np.ndarray, scaler: float) -> float:
     """Elementwise multiply window values by weights; return sum of products."""
@@ -15,7 +16,9 @@ def static_features(df: pd.DataFrame, unique_weekdates: list, scaler: float, hig
 
     df.loc[:,'hour_sin'] = np.sin((df.index.hour * 60 + df.index.minute) * np.pi / 720)
     df.loc[:,'hour_cos'] = np.cos((df.index.hour * 60 + df.index.minute) * np.pi / 720)
-    df.loc[:,'day_of_week'] = df.index.dayofweek / 2 - 1
+    df.loc[:,'dow_sin'] = np.sin(2 * np.pi * df.index.dayofweek / 7)
+    df.loc[:,'dow_cos'] = np.cos(2 * np.pi * df.index.dayofweek / 7)
+    # df.loc[:,'day_of_week'] = df.index.dayofweek / 2 - 1
 
     # Heiken-ashi
     df.loc[:,'ha_close'] = (df[open_col] + df[high_col] + df[low_col] + df[close_col]) / 4
@@ -49,7 +52,7 @@ def static_features(df: pd.DataFrame, unique_weekdates: list, scaler: float, hig
     df.loc[:,'candle_sign'], df.loc[:,'candle_filling'], df.loc[:,'body_amplitude'], df.loc[:,'ha_wickstrength'], df.loc[:,'ha_sign'], df.loc[:,'ha_candle_fill'] = candle_information(df)
 
     for i in [2, 4, 8, 12]:
-        df.loc[:,f'rogers_satchell_vol_{i}'], df.loc[:,f'parkinson_vol_{i}'], df.loc[:,f'yang_zhang_vol_{i}'], df.loc[:,f'ctc_v_o_l_{i}'] \
+        df.loc[:,f'rogers_satchell_vol_{i}'], df.loc[:,f'parkinson_vol_{i}'], df.loc[:,f'yang_zhang_vol_{i}'], df.loc[:,f'ctc_vol_{i}'] \
             = volatility(df, i, i, i, i, high_col, low_col, open_col, close_col)
 
     #vol_features = [col for col in dax_data[index_base].columns if "vol_" in col]
@@ -81,12 +84,12 @@ def static_features(df: pd.DataFrame, unique_weekdates: list, scaler: float, hig
     df.loc[:,'close_wavelet_rolling'] = df['Close'].rolling(window=10, min_periods=10).apply(wavelet_denoising_rolling, raw=True, args=('db6', 8, 7, None))
 
     df.loc[:,"abs_log_ret_1"] = np.abs(df["log_ret_1"])
-    df.loc[:,"tail_index_1"] = fe.math.tail_index(df=df, col="abs_log_ret_1", window_size=24, k_ratio=0.10).replace([np.inf], np.nan).ffill()
+    df.loc[:,"tail_index_1"] = math.tail_index(df=df, col="abs_log_ret_1", window_size=24, k_ratio=0.10).replace([np.inf], np.nan).ffill()
 
-    df.loc[:,'close_regr_entropy'] = fe.math.sample_entropy(df=df, col='Close', window_size=48)
-    df.loc[:,'permutation_entropy'] = fe.math.permutation_entropy(df=df, col="Close", window_size=48, order=5)
-    df.loc[:,"skew"] = fe.math.skewness(df=df, col="log_ret_1", window_size=48)
-    df.loc[:,"petrosian_fd"] = fe.math.petrosian_fd(df=df, col="Close", window_size=48)
+    df.loc[:,'close_regr_entropy'] = math.sample_entropy(df=df, col='Close', window_size=48)-1
+    df.loc[:,'permutation_entropy'] = math.permutation_entropy(df=df, col="Close", window_size=48, order=5)-0.5
+    df.loc[:,"skew"] = math.skewness(df=df, col="log_ret_1", window_size=48)
+    df.loc[:,"petrosian_fd"] = (math.petrosian_fd(df=df, col="Close", window_size=48)-1)*10
 
     # Pivots
     print("pivots: "+datetime.now().strftime('%H:%M:%S'))

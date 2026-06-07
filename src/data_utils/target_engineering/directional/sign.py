@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from ..magnitude import future_returns
+from src.data_utils.target_engineering.magnitude.returns import future_returns
 
 
 def future_returns_sign(

@@ -6,9 +6,9 @@ alwaysApply: true
 # Python Virtual Environment Configuration
 
 ## Virtual Environment Location
-- **Always use the virtual environment located at:** `/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment`
-- **Python interpreter path:** `/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/python`
-- **Pip path:** `/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/pip`
+- **Always use the virtual environment located at:** `/home/piotr/venv/algo-ml-pipeline`
+- **Python interpreter path:** `/home/piotr/venv/algo-ml-pipeline/bin/python`
+- **Pip path:** `/home/piotr/venv/algo-ml-pipeline/bin/pip`
 
 ## CRITICAL: Running Python Commands
 
@@ -17,14 +17,14 @@ When executing ANY Python command or script, you MUST use one of these approache
 ### Option 1: Use Full Path (RECOMMENDED)
 Always use the full path to the Python interpreter:
 ```bash
-/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/python your_script.py
-/Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/pip install package
+/home/piotr/venv/algo-ml-pipeline/bin/python your_script.py
+/home/piotr/venv/algo-ml-pipeline/bin/pip install package
 ```
 
 ### Option 2: Activate Venv First
 If you need to use `python` or `pip` directly, activate the venv in the same command:
 ```bash
-source /Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/activate && python your_script.py
+source /home/piotr/venv/algo-ml-pipeline/bin/activate && python your_script.py
 ```
 
 ## Terminal Command Rules
@@ -35,6 +35,6 @@ source /Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/activate && py
 - When using `run_terminal_cmd`, prefer using the full Python path to avoid shell activation issues
 - For multi-line commands or scripts, activate the venv at the start:
   ```bash
-  source /Users/tzieleniewski/venv/End-to-end-Youtube-Sentiment/bin/activate && \
+  source /home/piotr/venv/algo-ml-pipeline/bin/activate && \
   python your_script.py
   ```

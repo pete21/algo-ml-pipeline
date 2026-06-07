@@ -43,6 +43,29 @@ pywt.families(short=False)
 # plt.show()
 
 
+# wavelet = pywt.Wavelet('db6')
+
+def wavelet_transform(data, lvl=8):
+    coeff = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
+    return coeff
+
+# Inverse wavelet transform
+def inverse_wavelet_transform(coeffs, lvl=8, clear_levels=4):
+    # remove last <clear_levels> finer details
+    for i in range(clear_levels):
+        coeffs[-i-1] = np.zeros(coeffs[-i-1].shape)
+    return pywt.waverec(coeffs, wavelet, mode='symmetric')
+
+def wavelet_denoising(data, wavelet='db4', lvl=8):
+    coeffs = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
+    threshold = np.std(coeffs[-lvl])
+    coeffs = [pywt.threshold(c, threshold, mode='soft', substitute=0) for c in coeffs]
+    denoised_data = pywt.waverec(coeffs, wavelet)
+    #print("Original data: {}".format(data))
+    #print("Denoised data using wavelet {}: {}".format(wavelet, denoised_data))
+    return denoised_data
+
+
 def wavelet_denoising2(data, wavelet='db4', lvl=8, clear_levels=4):
     coeffs = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
     threshold = np.std(coeffs[0])
@@ -54,7 +77,7 @@ def wavelet_denoising2(data, wavelet='db4', lvl=8, clear_levels=4):
     return denoised_data
 
 
-def wavelet_denoising3(data, wavelet='db4', lvl=8, clear_levels=4, threshold=None):
+def wavelet_denoising_rolling(data, wavelet='db4', lvl=8, clear_levels=4, threshold=None):
     coeffs = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
     if threshold is None:
         threshold = np.std(coeffs[0])

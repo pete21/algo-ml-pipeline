@@ -88,8 +88,8 @@ def objective(trial, data: dict, index_base: int, indexes_higher: list, timefram
         'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 7, 15),
         'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 5, 25),
         'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 3, 20),
-        'train_range_len': trial.suggest_int('train_range_len', 10, 15),
-        'test_range_len': trial.suggest_int('test_range_len', 3, 5),
+        'train_range_len': trial.suggest_int('train_range_len', 5, 5),  #10,15
+        'test_range_len': trial.suggest_int('test_range_len', 3, 5),  #3,5
         'hour_range_start': trial.suggest_int('hour_range_start', 10, 11),
         'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
         'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
@@ -170,7 +170,8 @@ def objective(trial, data: dict, index_base: int, indexes_higher: list, timefram
             tuples.append((X_train, X_test, y_train, y_test, data_target, model_params, 1))         # exponential_growth(1, 0.02, num_splits-idx-1)
 
         results = p.starmap(do_backtest_Strategy2, tuples)
-        results.sort(key=lambda res: res[5]['Start'])
+    
+    results.sort(key=lambda res: res[5]['Start'])
 
     for res in results:
         scores.append(res[0])
@@ -194,50 +195,48 @@ def objective(trial, data: dict, index_base: int, indexes_higher: list, timefram
 
 
     # Set tracking URI
-    print("Setting MLFlow tracking URI for latest run...")
+    print("Setting MLFlow tracking and experiment ID for active run...")
     mlflow.set_tracking_uri("http://localhost:5000/")
     mlflow.set_experiment(experiment_id=experiment_id)
-    print(f"Experiment ID: {experiment_id}")
+    # print(f"Experiment ID: {experiment_id}")
 
-    with mlflow.start_run() as run:
-        # mlflow.log_model_params(model_params)
-        mlflow.log_params(model_params)
-        mlflow.log_param('num_splits', num_splits)
-        mlflow.log_param('start_time', start_time)
-        mlflow.log_param('end_time', datetime.now())
-        mlflow.log_param('duration', datetime.now() - start_time)
-        mlflow.log_param('_strategy', stats[0]['_strategy'])
-        mlflow.log_metric('total_score', total_score)
-        mlflow.log_metric('scores_std', scores_std)
-        mlflow.log_metric('sharpe_mean', np.mean(sharpe))
-        mlflow.log_metric('sortino_mean', np.mean(sortino))
-        mlflow.log_metric('calmar_mean', np.mean(calmar))
 
-        for idx, res in enumerate(results):
-            with mlflow.start_run(nested=True, run_name=f"Child_Run_{idx}") as child_run:
-                mlflow.log_metric('Start', stats['Start'])
-                mlflow.log_metric('End', stats['End'])
-                mlflow.log_metric('Equity Final [$]', stats['Equity Final [$]'])
-                mlflow.log_metric('Equity Peak [$]', stats['Equity Peak [$]'])
-                mlflow.log_metric('Return [%]', stats['Return [%]'])
-                mlflow.log_metric('Buy & Hold Return [%]', stats['Buy & Hold Return [%]'])
-                mlflow.log_metric('Sharpe Ratio', stats['Sharpe Ratio'])
-                mlflow.log_metric('Sortino Ratio', stats['Sortino Ratio'])
-                mlflow.log_metric('Calmar Ratio', stats['Calmar Ratio'])
-                mlflow.log_metric('Max. Drawdown [%]', stats['Max. Drawdown [%]'])
-                mlflow.log_metric('Avg. Drawdown [%]', stats['Avg. Drawdown [%]'])
-                mlflow.log_metric('Max. Drawdown Duration', stats['Max. Drawdown Duration'])
-                mlflow.log_metric('Avg. Drawdown Duration', stats['Avg. Drawdown Duration'])
-                mlflow.log_metric('# Trades', stats['# Trades'])
-                mlflow.log_metric('Win Rate [%]', stats['Win Rate [%]'])
-                mlflow.log_metric('Best Trade [%]', stats['Best Trade [%]'])
-                mlflow.log_metric('Worst Trade [%]', stats['Worst Trade [%]'])
-                mlflow.log_metric('Avg. Trade [%]', stats['Avg. Trade [%]'])
-                mlflow.log_metric('Avg. Trade Duration', stats['Avg. Trade Duration'])
-                mlflow.log_metric('Profit Factor', stats['Profit Factor'])
-                mlflow.log_metric('Expectancy [%]', stats['Expectancy [%]'])
-                mlflow.log_metric('SQN', stats['SQN'])
-                mlflow.log_metric('Kelly Criterion', stats['Kelly Criterion'])
+    for idx, res in enumerate(results):
+        with mlflow.start_run(nested=True, run_name=f"Child_Run_{idx}") as child_run:
+
+            try:
+                # mlflow.log_metric('Start', int(res[5]['Start'].timestamp()))
+                mlflow.log_metric('Start', res[5]['Start'].year*10000+res[5]['Start'].month*100+res[5]['Start'].day)
+                # mlflow.log_metric('End', int(res[5]['End'].timestamp()))
+                mlflow.log_metric('End', res[5]['End'].year*10000+res[5]['End'].month*100+res[5]['End'].day)
+                mlflow.log_metric('Equity_Final', res[5]['Equity Final [$]'])
+                mlflow.log_metric('Equity_Peak', res[5]['Equity Peak [$]'])
+                mlflow.log_metric('Commissions', res[5]['Commissions [$]'])
+                mlflow.log_metric('Return_Percentage', res[5]['Return [%]'])
+                mlflow.log_metric('Buy_Hold_Return_Percentage', res[5]['Buy & Hold Return [%]'])
+                mlflow.log_metric('Sharpe_Ratio', res[5]['Sharpe Ratio'])
+                mlflow.log_metric('Sortino_Ratio', res[5]['Sortino Ratio'])
+                mlflow.log_metric('Calmar_Ratio', res[5]['Calmar Ratio'])
+                mlflow.log_metric('Max_Drawdown_Percentage', res[5]['Max. Drawdown [%]'])
+                mlflow.log_metric('Avg_Drawdown_Percentage', res[5]['Avg. Drawdown [%]'])
+                mlflow.log_metric('Max_Drawdown_Duration_Seconds', res[5]['Max. Drawdown Duration'].seconds)
+                mlflow.log_metric('Avg_Drawdown_Duration_Seconds', res[5]['Avg. Drawdown Duration'].seconds)
+                mlflow.log_metric('Num_Trades', res[5]['# Trades'])
+                mlflow.log_metric('Win_Rate_Percentage', res[5]['Win Rate [%]'])
+                mlflow.log_metric('Best_Trade_Percentage', res[5]['Best Trade [%]'])
+                mlflow.log_metric('Worst_Trade_Percentage', res[5]['Worst Trade [%]'])
+                mlflow.log_metric('Avg_Trade_Percentage', res[5]['Avg. Trade [%]'])
+                mlflow.log_metric('Max_Trade_Duration_Seconds', res[5]['Max. Trade Duration'].seconds)
+                mlflow.log_metric('Avg_Trade_Duration_Seconds', res[5]['Avg. Trade Duration'].seconds)
+                mlflow.log_metric('Profit_Factor', res[5]['Profit Factor'])
+                mlflow.log_metric('Expectancy_Percentage', res[5]['Expectancy [%]'])
+                mlflow.log_metric('SQN', res[5]['SQN'])
+                mlflow.log_metric('Kelly_Criterion', res[5]['Kelly Criterion'])
+                print(f"Child run {idx} logging ended")
+            except Exception as e:
+                # mlflow.log_params(res[5])
+                print(res[5])
+                print(f"Error logging child run {idx}: {e}")
 
     return total_score + np.mean(np.sort(scores)[:3]) #* np.sqrt(max(np.mean(sortino)+np.mean(calmar), 1)) / (parameters['hour_range_stop']-parameters['hour_range_start']+2)
 
