@@ -2,16 +2,29 @@ import numpy as np
 import pandas as pd
 import pickle
 import logging
-import yaml
 import mlflow
-import mlflow.sklearn
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
+from datetime import date
 from mlflow.models import infer_signature
+from mlflow.tracking import MlflowClient
+
+from src.data_utils.utils import load_params, get_dates
+from src.model.model_building import load_data
+
+os.environ["AWS_ACCESS_KEY_ID"] = "minio"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "minio123"
+os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://192.168.10.250:9900"
+
+MLFLOW_TRACKING_URI = "http://localhost:5000/"
+BUILDING_EXPERIMENT_TAGS = {
+    "project_name": "xgb-dax-pipeline",
+    "stage": "building",
+}
 
 # logging configuration
 logger = logging.getLogger('model_evaluation')
@@ -30,17 +43,6 @@ file_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
-
-def load_data(file_path: str) -> pd.DataFrame:
-    """Load data from a CSV file."""
-    try:
-        df = pd.read_csv(file_path)
-        df.fillna('', inplace=True)  # Fill any NaN values
-        logger.debug('Data loaded and NaNs filled from %s', file_path)
-        return df
-    except Exception as e:
-        logger.error('Error loading data from %s: %s', file_path, e)
-        raise
 
 
 def load_model(model_path: str):
@@ -67,16 +69,70 @@ def load_vectorizer(vectorizer_path: str) -> TfidfVectorizer:
         raise
 
 
-def load_params(params_path: str) -> dict:
-    """Load parameters from a YAML file."""
-    try:
-        with open(params_path, 'r') as file:
-            params = yaml.safe_load(file)
-        logger.debug('Parameters loaded from %s', params_path)
-        return params
-    except Exception as e:
-        logger.error('Error loading parameters from %s: %s', params_path, e)
-        raise
+def find_latest_building_experiment(client: MlflowClient):
+    """Find the most recent MLflow experiment tagged for the building stage."""
+    filter_string = " AND ".join(
+        f"tags.{key} = '{value}'" for key, value in BUILDING_EXPERIMENT_TAGS.items()
+    )
+    experiments = client.search_experiments(filter_string=filter_string)
+    if not experiments:
+        raise ValueError(
+            f"No MLflow experiments found with tags: {BUILDING_EXPERIMENT_TAGS}"
+        )
+    return max(experiments, key=lambda exp: exp.last_update_time or exp.creation_time)
+
+
+def load_model_params_from_building_experiment(client: MlflowClient) -> dict:
+    """Load model_params artifact from the best run of the latest building experiment."""
+    experiment = find_latest_building_experiment(client)
+    best_run_name = experiment.tags.get("best_run_name")
+    if not best_run_name:
+        raise ValueError(
+            f"Experiment '{experiment.name}' (id={experiment.experiment_id}) "
+            "is missing the 'best_run_name' tag"
+        )
+
+    print(
+        f"Using experiment '{experiment.name}' (id={experiment.experiment_id}), "
+        f"best_run_name='{best_run_name}'"
+    )
+
+    runs = mlflow.search_runs(
+        experiment_ids=[experiment.experiment_id],
+        filter_string=f"run_name = '{best_run_name}'",
+    )
+    if runs.empty:
+        raise ValueError(
+            f"No run named '{best_run_name}' found in experiment "
+            f"'{experiment.name}' (id={experiment.experiment_id})"
+        )
+
+    run_id = runs.iloc[0]["run_id"]
+    artifact_dir = mlflow.artifacts.download_artifacts(
+        run_id=run_id,
+        artifact_path="model_params",
+    )
+
+    json_files = [
+        os.path.join(artifact_dir, filename)
+        for filename in os.listdir(artifact_dir)
+        if filename.endswith(".json")
+    ]
+    if not json_files:
+        raise ValueError(
+            f"No JSON model_params artifact found for run '{best_run_name}' "
+            f"(run_id={run_id})"
+        )
+
+    with open(json_files[0], "r") as file:
+        model_params = json.load(file)
+
+    logger.debug(
+        "Model params loaded from MLflow run '%s' (run_id=%s)",
+        best_run_name,
+        run_id,
+    )
+    return model_params
 
 
 def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray):
@@ -127,76 +183,34 @@ def save_model_info(run_id: str, model_path: str, file_path: str) -> None:
 
 
 def main():
-    mlflow.set_tracking_uri("http://ec2-52-91-160-21.compute-1.amazonaws.com:5000/")
 
-    mlflow.set_experiment('dvc-pipeline-runs')
+    # Get root directory and resolve the path for params.yaml
+    root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
+
+    # Load parameters from the root directory
+    params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
+    # model_params = load_json_params(os.path.join(root_dir, 'model_params.json'), logger=logger)
+
+    # Load the preprocessed data from the interim directory
+    data = load_data(data_path=params['model_building']['data_path'], params=params)
     
-    with mlflow.start_run() as run:
-        try:
-            # Load parameters from YAML file
-            root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
-            params = load_params(os.path.join(root_dir, 'params.yaml'))
+    cutoff_date = date(2024,6,1)
+    for d in data:
+        data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(14, "D")]
+    unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
+    print(mondays_indexes)
+    splits_all = []
 
-            # Log parameters
-            for key, value in params.items():
-                mlflow.log_param(key, value)
-            
-            # Load model and vectorizer
-            model = load_model(os.path.join(root_dir, 'lgbm_model.pkl'))
-            vectorizer = load_vectorizer(os.path.join(root_dir, 'tfidf_vectorizer.pkl'))
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    client = MlflowClient()
+    model_params = load_model_params_from_building_experiment(client)
+    print(f"Loaded model params: {model_params}")
 
-            # Load test data for signature inference
-            test_data = load_data(os.path.join(root_dir, 'data/interim/test_processed.csv'))
 
-            # Prepare test data
-            X_test_tfidf = vectorizer.transform(test_data['clean_comment'].values)
-            y_test = test_data['category'].values
 
-            # Create a DataFrame for signature inference (using first few rows as an example)
-            input_example = pd.DataFrame(X_test_tfidf.toarray()[:5], columns=vectorizer.get_feature_names_out())  # <--- Added for signature
 
-            # Infer the signature
-            signature = infer_signature(input_example, model.predict(X_test_tfidf[:5]))  # <--- Added for signature
 
-            # Log model with signature
-            mlflow.sklearn.log_model(
-                model,
-                "lgbm_model",
-                signature=signature,  # <--- Added for signature
-                input_example=input_example  # <--- Added input example
-            )
 
-            # Save model info
-            # artifact_uri = mlflow.get_artifact_uri()
-            model_path = "lgbm_model"
-            save_model_info(run.info.run_id, model_path, 'experiment_info.json')
-
-            # Log the vectorizer as an artifact
-            mlflow.log_artifact(os.path.join(root_dir, 'tfidf_vectorizer.pkl'))
-
-            # Evaluate model and get metrics
-            report, cm = evaluate_model(model, X_test_tfidf, y_test)
-
-            # Log classification report metrics for the test data
-            for label, metrics in report.items():
-                if isinstance(metrics, dict):
-                    mlflow.log_metrics({
-                        f"test_{label}_precision": metrics['precision'],
-                        f"test_{label}_recall": metrics['recall'],
-                        f"test_{label}_f1-score": metrics['f1-score']
-                    })
-
-            # Log confusion matrix
-            log_confusion_matrix(cm, "Test Data")
-
-            # Add important tags
-            mlflow.set_tag("model_type", "LightGBM")
-            mlflow.set_tag("task", "Sentiment Analysis")
-            mlflow.set_tag("dataset", "YouTube Comments")
-
-        except Exception as e:
-            logger.error(f"Failed to complete model evaluation: {e}")
-            print(f"Error: {e}")
 
 if __name__ == '__main__':
     main()
