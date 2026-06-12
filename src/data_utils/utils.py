@@ -56,15 +56,15 @@ def get_dates(data: dict, index: int) -> tuple[list, list, list]:
     return unique_dates, unique_weekdates, mondays_indexes
 
 
-def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, timeframes: list, scalers: dict, X_cols: list, y_col: str, cutoff_date: date, col_open="Open", col_high="High", col_low="Low", col_close="Close") -> tuple[pd.DataFrame, pd.DataFrame, list]:
-    cutoff_date_2 = cutoff_date - pd.Timedelta(7, "D")
+def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, timeframes: list, scalers: dict, X_cols: list, y_col: str, cutoff_date: date, lags: list, col_open="Open", col_high="High", col_low="Low", col_close="Close") -> tuple[pd.DataFrame, pd.DataFrame, list]:
+    cutoff_date_2 = cutoff_date - pd.Timedelta(14, "D")
     ml_data = {}
     ml_data[index_b] = dynamic_features(data[index_b], parameters, scalers[index_b], col_close=col_close, col_high=col_high, col_low=col_low)
     ml_data[index_b] = ml_data[index_b][X_cols + [y_col] + [col_open, col_high, col_low, "date_merge", 'dow_sin', 'dow_cos', 'hour_sin', 'hour_cos']].loc[ml_data[index_b].index.date>=cutoff_date_2]
 
     target = ml_data[index_b].loc[(ml_data[index_b].index.hour>=parameters['hour_range_start']) & (ml_data[index_b].index.hour<=parameters['hour_range_stop']), [y_col]]
 
-    lag_f = LagFeatures(variables = X_cols + [col_open, col_high, col_low], periods=[1,2], drop_na=True)
+    lag_f = LagFeatures(variables = X_cols + [col_open, col_high, col_low], periods=lags, drop_na=True)
 
     for i in indexes_h:
         ml_data[i] = dynamic_features(data[i], p[i], scalers[i], col_close=col_close, col_high=col_high, col_low=col_low)
@@ -140,7 +140,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
     # X_columns.append('log_ret_ha_long_pca2')
 # X_columns = [x for x in X_columns if x not in cols]
 
-    if True:
+    if parameters['pca']:
         print('ichimoku_short_pca')
         cols = [x for x in X_columns if (x.startswith("tenkan_sen") or x.startswith("kijun_sen")) and not(x.endswith("1h"))]
         pca_res = calc_kernel_pca(ml_data[index_b], dates[1:], 10, cols, ['ichimoku_short_pca1','ichimoku_short_pca2'])
@@ -173,39 +173,40 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
         X_columns.append('kama_long_pca2')
     #    X_columns = [x for x in X_columns if x not in cols]
 
-    #print(X_columns)
-    #print(len(X_columns))
-    cols=[
-        # 'sine','sine_lag_1','sine_lag_2',
-        # 'sine_15m','sine_lag_1_15m','sine_lag_2_15m',
-        # 'lowerband_r_1h','lowerband_r_lag_1_1h','lowerband_r_lag_2_1h',
-        # 'upperband_r_1h','upperband_r_lag_1_1h','upperband_r_lag_2_1h',
-        # 'ema_ha_wickstrength_15m','ema_ha_wickstrength_lag_1_15m','ema_ha_wickstrength_lag_2_15m',
-        # 'stochrsid_1h','stochrsid_lag_1_1h','stochrsid_lag_2_1h',
-        # 'rsi_1h','rsi_lag_1_1h','rsi_lag_2_1h',
-        # 'rsi_ha_1h','rsi_ha_lag_1_1h','rsi_ha_lag_2_1h',
-        # 'rsi','rsi_lag_1','rsi_lag_2',
-        'kama_trend_slow_diff','kama_trend_slow_diff_15m','kama_trend_slow_diff_1h',
-        'kama_trend_fast_diff','kama_trend_fast_diff_15m','kama_trend_fast_diff_1h',
-        'kama_trend_slow_diff2','kama_trend_slow_diff2_15m','kama_trend_slow_diff2_1h',
-        'kama_trend_fast_diff2','kama_trend_fast_diff2_15m','kama_trend_fast_diff2_1h',
-        'kama_trend_slow_diff_lag_1','kama_trend_slow_diff_lag_1_15m','kama_trend_slow_diff_lag_1_1h',
-        'kama_trend_fast_diff_lag_1','kama_trend_fast_diff_lag_1_15m','kama_trend_fast_diff_lag_1_1h',
-        'kama_trend_slow_diff2_lag_1','kama_trend_slow_diff2_lag_1_15m','kama_trend_slow_diff2_lag_1_1h',
-        'kama_trend_fast_diff2_lag_1','kama_trend_fast_diff2_lag_1_15m','kama_trend_fast_diff2_lag_1_1h',
-        'kama_trend_slow_diff_lag_2','kama_trend_slow_diff_lag_2_15m','kama_trend_slow_diff_lag_2_1h',
-        'kama_trend_fast_diff_lag_2','kama_trend_fast_diff_lag_2_15m','kama_trend_fast_diff_lag_2_1h',
-        'kama_trend_slow_diff2_lag_2','kama_trend_slow_diff2_lag_2_15m','kama_trend_slow_diff2_lag_2_1h',
-        'kama_trend_fast_diff2_lag_2','kama_trend_fast_diff2_lag_2_15m','kama_trend_fast_diff2_lag_2_1h',
+        #print(X_columns)
+        #print(len(X_columns))
+        cols=[
+            # 'sine','sine_lag_1','sine_lag_2',
+            # 'sine_15m','sine_lag_1_15m','sine_lag_2_15m',
+            # 'lowerband_r_1h','lowerband_r_lag_1_1h','lowerband_r_lag_2_1h',
+            # 'upperband_r_1h','upperband_r_lag_1_1h','upperband_r_lag_2_1h',
+            # 'ema_ha_wickstrength_15m','ema_ha_wickstrength_lag_1_15m','ema_ha_wickstrength_lag_2_15m',
+            # 'stochrsid_1h','stochrsid_lag_1_1h','stochrsid_lag_2_1h',
+            # 'rsi_1h','rsi_lag_1_1h','rsi_lag_2_1h',
+            # 'rsi_ha_1h','rsi_ha_lag_1_1h','rsi_ha_lag_2_1h',
+            # 'rsi','rsi_lag_1','rsi_lag_2',
+            'kama_trend_slow_diff','kama_trend_slow_diff_15m','kama_trend_slow_diff_1h',
+            'kama_trend_fast_diff','kama_trend_fast_diff_15m','kama_trend_fast_diff_1h',
+            'kama_trend_slow_diff2','kama_trend_slow_diff2_15m','kama_trend_slow_diff2_1h',
+            'kama_trend_fast_diff2','kama_trend_fast_diff2_15m','kama_trend_fast_diff2_1h',
+            'kama_trend_slow_diff_lag_1','kama_trend_slow_diff_lag_1_15m','kama_trend_slow_diff_lag_1_1h',
+            'kama_trend_fast_diff_lag_1','kama_trend_fast_diff_lag_1_15m','kama_trend_fast_diff_lag_1_1h',
+            'kama_trend_slow_diff2_lag_1','kama_trend_slow_diff2_lag_1_15m','kama_trend_slow_diff2_lag_1_1h',
+            'kama_trend_fast_diff2_lag_1','kama_trend_fast_diff2_lag_1_15m','kama_trend_fast_diff2_lag_1_1h',
+            'kama_trend_slow_diff_lag_2','kama_trend_slow_diff_lag_2_15m','kama_trend_slow_diff_lag_2_1h',
+            'kama_trend_fast_diff_lag_2','kama_trend_fast_diff_lag_2_15m','kama_trend_fast_diff_lag_2_1h',
+            'kama_trend_slow_diff2_lag_2','kama_trend_slow_diff2_lag_2_15m','kama_trend_slow_diff2_lag_2_1h',
+            'kama_trend_fast_diff2_lag_2','kama_trend_fast_diff2_lag_2_15m','kama_trend_fast_diff2_lag_2_1h',
 
-        'tenkan_sen','tenkan_sen_lag_1','tenkan_sen_lag_2',
-        'tenkan_sen_15m','tenkan_sen_lag_1_15m','tenkan_sen_lag_2_15m',
-        'tenkan_sen_1h','tenkan_sen_lag_1_1h','tenkan_sen_lag_2_1h',
-        'kijun_sen','kijun_sen_lag_1','kijun_sen_lag_2',
-        'kijun_sen_15m','kijun_sen_lag_1_15m','kijun_sen_lag_2_15m',
-        'kijun_sen_1h','kijun_sen_lag_1_1h','kijun_sen_lag_2_1h',
-    ]
-    X_columns = [x for x in X_columns if x not in cols]
+            'tenkan_sen','tenkan_sen_lag_1','tenkan_sen_lag_2',
+            'tenkan_sen_15m','tenkan_sen_lag_1_15m','tenkan_sen_lag_2_15m',
+            'tenkan_sen_1h','tenkan_sen_lag_1_1h','tenkan_sen_lag_2_1h',
+            'kijun_sen','kijun_sen_lag_1','kijun_sen_lag_2',
+            'kijun_sen_15m','kijun_sen_lag_1_15m','kijun_sen_lag_2_15m',
+            'kijun_sen_1h','kijun_sen_lag_1_1h','kijun_sen_lag_2_1h',
+        ]
+        X_columns = [x for x in X_columns if x not in cols]
+
     # print(X_columns)
     X = ml_data[index_b][X_columns]
     y = ml_data[index_b][y_col]

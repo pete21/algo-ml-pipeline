@@ -1,15 +1,13 @@
-
 import mlflow
-import numpy as np
+import logging
+import optuna
 import pandas as pd
 import os
 import json
-import logging
-from src.data_utils.utils import load_params, load_json_params, get_dates
+from src.data_utils.utils import load_params, get_dates
 from src.backtesting.optimization import objective
 from datetime import date, datetime
 
-import optuna
 # from optuna.visualization import plot_param_importances, plot_contour, plot_slice
 # from optuna.visualization import plot_contour
 # from optuna.visualization import plot_edf
@@ -184,7 +182,7 @@ def create_mlflow_experiment(experiment_name: str, mlflow_tracking_uri: str, tag
 
     try:
         # Create the experiment. It returns the ID of the created experiment.
-        experiment_id = mlflow.create_experiment(name=experiment_name)
+        experiment_id = mlflow.create_experiment(name=experiment_name, tags=tags)
         print(f"Experiment '{experiment_name}' created with ID: {experiment_id}")
     except mlflow.exceptions.MlflowException as e:
         # Handle cases where the experiment might already exist
@@ -201,6 +199,7 @@ def create_mlflow_experiment(experiment_name: str, mlflow_tracking_uri: str, tag
 
 
 def main():
+    print("Starting model building process...")
     try:
         # Get root directory and resolve the path for params.yaml
         root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
@@ -214,73 +213,66 @@ def main():
         
         cutoff_date = date(2024,6,1)
         for d in data:
-            data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(14, "D")]
+            data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
         unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
         print(mondays_indexes)
-        splits_all = []
 
         experiment_name = f'xgb-dax-pipeline-runs-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
         print(f"Experiment name: {experiment_name}")
-        tags = {
-            "project_name": "xgb-dax-pipeline",
-            "mlflow.note.content": "This is the experiment for the xgb-dax-pipeline",
-            "optimizer": "optuna",
-            "model_family": "xgboost",
-            "feature_set_version": 1,
-        }
 
-        experiment_id = create_mlflow_experiment(experiment_name=experiment_name, mlflow_tracking_uri="http://localhost:5000/", tags=tags)
+        experiment_id = create_mlflow_experiment(experiment_name=experiment_name, mlflow_tracking_uri="http://localhost:5000/", tags={})
         mlflow.set_experiment(experiment_id=experiment_id)
         # experiment = mlflow.get_experiment(experiment_id=experiment_id)
 
-        #     try:
+        study = optuna.create_study(direction='maximize')
+        study.optimize(lambda trial: objective(trial, data, params['model_building'], cutoff_date, unique_dates, mondays_indexes, experiment_id), n_trials=params['model_building']['n_trials'])
+        print("Best trial number: ", study.best_trial.number)
+        print("Best parameters: ", study.best_params)
+        print("Best score:", study.best_value)
 
-        with mlflow.start_run() as run:
-            mlflow.log_params(params['model_building'])
-            # mlflow.log_param('num_splits', num_splits)
-            mlflow.log_param('start_time', datetime.now())
-            mlflow.log_param('cutoff_date', cutoff_date)
-            # mlflow.log_param('end_time', datetime.now())
-            # mlflow.log_param('duration', datetime.now() - start_time)
-            # mlflow.log_param('_strategy', stats[0]['_strategy'])
-            # mlflow.log_metric('total_score', total_score)
-            # mlflow.log_metric('scores_std', scores_std)
-            # mlflow.log_metric('sharpe_mean', np.mean(sharpe))
-            # mlflow.log_metric('sortino_mean', np.mean(sortino))
-            # mlflow.log_metric('calmar_mean', np.mean(calmar))
-
-            study = optuna.create_study(direction='maximize')
-            study.optimize(lambda trial: objective(trial, data, params['model_building']['index_base'], params['model_building']['indexes_higher'], params['model_building']['timeframes'], params['model_building']['timeframe_scalers'], params['model_building']['list_X'], params['model_building']['col_y'], cutoff_date, unique_dates, mondays_indexes, splits_all, experiment_id), n_trials=params['model_building']['n_trials'])
-            print("Best trial number: ", study.best_trial.number)
-            print("Best parameters: ", study.best_params)
-            print("Best score:", study.best_value)
-            mlflow.log_param('num_splits', len(splits_all[study.best_trial.number]))
-
-            # run = mlflow.active_run()
-            mlflow.log_metric('best_trial_number', study.best_trial.number)
-            mlflow.log_dict(study.best_params, artifact_file="best_params.json")
-            mlflow.log_metric('best_score', study.best_value)
-
-            study_trials = study.trials_dataframe().sort_values(by=['value'], ascending=False)
-            study_trials.to_csv("study_trials.csv", index=False)
-            mlflow.log_artifact("study_trials.csv")
-            mlflow.log_param('end_time', datetime.now())
-            # mlflow.end_run(run_id=run.info.run_id)
 
         # Save the trained model in the root directory
-        save_model(study.best_params, os.path.join(params['model_building']['models_path'], params['model_building']['model_params_name'].format(timeframe=params['model_building']['timeframe'], version=params['model_building']['version'])))
+        print("Saving model parameters to json...")
+        model_params_path = os.path.join(params['model_building']['models_path'], params['model_building']['model_params_name'].format(timeframe=params['model_building']['timeframe'], version=params['model_building']['version']))
+        save_model(study.best_params, model_params_path)
 
 
-            # except Exception as e:
-            #     logger.error(f"Failed to complete model building & evaluation: {e}")
-            #     print(f"Error: {e}")
+        print("Saving study trials to csv...")
+        optuna_trials_path = os.path.join(params['model_building']['models_path'],f"{experiment_name}_trials.csv")
+        study_trials = study.trials_dataframe().sort_values(by=['value'], ascending=False)
+        print("Study trials: ", study_trials.head())
+        study_trials.to_csv(optuna_trials_path, index=False)
+        study_trials.to_csv(os.path.join(params['model_building']['models_path'],"optuna_trials.csv"), index=False)
 
+        print(f"Searching for run_id with run name: Trial_{study.best_trial.number}")
+        # get run_id with run name 
+        run_object = mlflow.search_runs(filter_string=f"run_name = 'Trial_{study.best_trial.number}'")
+        run_id = run_object["run_id"][0]
 
+        tags = {
+            "project_name": "xgb-dax-pipeline",
+            "stage": "building",
+            "mlflow.note.content": params['model_building']['note'],
+            "optimizer": "optuna",
+            "model_family": "xgboost",
+            "model_name": params['model_building']['model_name'],
+            "best_trial_number": study.best_trial.number,
+            "best_run_name": f"Trial_{study.best_trial.number}",
+            "best_run_id": run_id,
+        }
+        print("Setting tags for experiment: ", tags)
+        mlflow.set_experiment_tags(tags)
+
+        with mlflow.start_run(run_id=run_id) as run:
+            mlflow.log_artifact(local_path=os.path.join(params['model_building']['models_path'],"optuna_trials.csv"), artifact_path='optuna_trials')
+            mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
+            mlflow.log_metric('best', True)
+    
     except Exception as e:
         logger.error('Failed to complete the feature engineering and model building process: %s', e)
         print(f"Error: {e}")
+    print("Model building process completed successfully.")
 
 
 if __name__ == '__main__':
     main()
-

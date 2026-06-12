@@ -1,19 +1,20 @@
-from mlflow.entities import Experiment
+import json
 import numpy as np
 from datetime import date
 import multiprocessing as mp
 from random import random
 from datetime import datetime
-
+import os
 from src.data_utils.utils import getXy
 from src.data_utils.features import build_target
-from src.backtesting.strategies import do_backtest_Strategy2
+from src.backtesting.strategies import do_backtest_Strategy2, do_backtest_Strategy2_evaluation, do_backtest_Strategy2_training
 import mlflow
 # LOG_SPLITS_TABLE={}
 # for num_splits in range(5,16):
 #     LOG_SPLITS_TABLE[num_splits] = num_splits-1-(np.round(np.logspace(0,10,num=num_splits-1,base=0.93308)-0.5,3))*((num_splits-2)*2)
 
 LOG_SPLITS_TABLE = {
+    2: [1.0],
     5: [1.0, 2.236, 3.22 , 4.   ],
     6: [1.0, 2.272, 3.344, 4.24 , 5.   ],
     7: [1.0 , 2.29, 3.42, 4.4 , 5.25, 6.  ],
@@ -24,132 +25,167 @@ LOG_SPLITS_TABLE = {
     12: [1.0,  2.34,  3.58,  4.76,  5.84,  6.86,  7.8 ,  8.68,  9.5 , 10.28, 11.  ],
     13: [1.0 ,  2.342,  3.596,  4.784,  5.906,  6.94 ,  7.93 ,  8.832, 9.712, 10.526, 11.274, 12.   ],
     14: [1.0 ,  2.344,  3.616,  4.816,  5.944,  7.024,  8.032,  8.968, 9.88 , 10.72 , 11.536, 12.28 , 13.   ],
-    15: [1.0 ,  2.352,  3.626,  4.848,  5.992,  7.084,  8.124,  9.086, 10.022, 10.906, 11.738, 12.518, 13.272, 14.   ]
+    15: [1.0 ,  2.352,  3.626,  4.848,  5.992,  7.084,  8.124,  9.086, 10.022, 10.906, 11.738, 12.518, 13.272, 14.   ],
+    16: [ 1.   ,  2.344,  3.632,  4.864,  6.04 ,  7.132,  8.196,  9.204, 10.156, 11.052, 11.92 , 12.76 , 13.544, 14.272, 15.   ],
+    17: [ 1.  ,  2.35,  3.64,  4.87,  6.07,  7.18,  8.26,  9.28, 10.27, 11.2 , 12.1 , 12.94, 13.75, 14.53, 15.28, 16.  ],
+    18: [ 1.   ,  2.344,  3.656,  4.904,  6.088,  7.24 ,  8.328,  9.352, 10.376, 11.336, 12.232, 13.128, 13.96 , 14.76 , 15.56 , 16.296, 17.   ],
+    19: [ 1.   ,  2.36 ,  3.652,  4.91 ,  6.1  ,  7.256,  8.378,  9.432, 10.452, 11.438, 12.39 , 13.274, 14.158, 14.974, 15.79 , 16.538, 17.286, 18.   ],
+    20: [ 1.   ,  2.368,  3.664,  4.924,  6.148,  7.3  ,  8.416,  9.496, 10.54 , 11.548, 12.484, 13.42 , 14.32 , 15.184, 16.012, 16.804, 17.56 , 18.28 , 19.   ],
+    21: [ 1.   ,  2.368,  3.66 ,  4.952,  6.168,  7.346,  8.448,  9.55 , 10.614, 11.64 , 12.59 , 13.54 , 14.452, 15.326, 16.2  , 16.998, 17.796, 18.556, 19.278, 20.   ]
     }
 
 
-def objective(trial, data: dict, index_base: int, indexes_higher: list, timeframes: list, timeframe_scalers: list, list_X: list, col_y: list, cutoff_date: date, unique_dates: list, mondays_indexes: list, splits_all: list, experiment_id: str) -> float:
+def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: list, mondays_indexes: list, experiment_id: str, model_params_override: dict = None) -> float:
 
-    model_params = {
-        'n_estimators': trial.suggest_int('n_estimators', 300, 400),
-        'max_depth': trial.suggest_int('max_depth', 7, 8),
-        'learning_rate': trial.suggest_float('learning_rate', 0.02, 0.02),
-        'subsample': trial.suggest_float('subsample', 0.95, 0.95),
-        'gamma':  trial.suggest_float('gamma', 0.95, 0.95),
-        # 'feature_fraction':  trial.suggest_float('feature_fraction', 0.9, 1),
-        # 'num_leaves':  trial.suggest_int('num_leaves', 10, 200),
+    index_base = params['index_base']
+    indexes_higher = params['indexes_higher']
+    timeframes = params['timeframes']
+    timeframe_scalers = params['timeframe_scalers']
+    list_X = params['list_X']
+    col_y = params['col_y']
+    lags = params['lags']
+    
+    print("Trial: ", trial.number if trial else "Evaluation")
+    run_name = f"Trial_{trial.number}" if trial else "Evaluation"
+    # Set tracking URI
+    print("Setting MLFlow tracking and experiment ID...")
+    mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
+    mlflow.set_experiment(experiment_id=experiment_id)
+    # print(f"Experiment ID: {experiment_id}")
 
-        'sma1_period': trial.suggest_int('sma1_period', 2, 20),
-        'sma2_period': trial.suggest_int('sma2_period', 30, 90), 
-        'bb_periods': trial.suggest_int('bb_periods', 15, 50),
-        'bb_nbdev': trial.suggest_float('bb_nbdev', 2, 2.5),
-        'ema1_period': trial.suggest_int('ema1_period', 5, 10),
-        'ema2_period': trial.suggest_int('ema2_period', 10, 40),
-        'sar_acc': trial.suggest_float('sar_acc', 0.01, 0.5), 
-        'sar_max': trial.suggest_float('sar_max', 0.1, 1.5), 
-        'midprice_window': trial.suggest_int('midprice_window', 2, 2), # 2,30
-        'l1_fast': trial.suggest_int('l1_fast', 5, 20), # 15,3,10
-        'l2_fast': trial.suggest_int('l2_fast', 2, 6), 
-        'l3_fast': trial.suggest_int('l3_fast', 5, 15), 
-        'l1_slow': trial.suggest_int('l1_slow', 10, 40), 
-        'l2_slow': trial.suggest_int('l2_slow', 2, 6),
-        'l3_slow': trial.suggest_int('l3_slow', 15, 25),
-        'kama_trend_period': trial.suggest_int('kama_trend_period', 20, 40),
+    # mlflow.xgboost.autolog()
 
-        'ha_candle_period': trial.suggest_int('ha_candle_period', 4, 30), 
-        'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 4, 30), 
-        'displacement_strength_period': trial.suggest_int('displacement_strength_period', 2, 40), 
-        'displacement_strength': trial.suggest_float('displacement_strength', 1, 2),
-        'displacement_hull_period': trial.suggest_int('displacement_hull_period', 10, 60), 
-        #    'displacement_sma_period': trial.suggest_int('displacement_sma_period', 2, 30), 
-        'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 5, 20),
+    with mlflow.start_run(run_name=run_name) as run:
+        mlflow.log_param('cutoff_date', cutoff_date)
+        if params['evals_strategy']:
+            mlflow.log_param('_strategy', 'do_backtest_Strategy2_evaluation')
+        else:
+            mlflow.log_param('_strategy', 'do_backtest_Strategy2')
+        mlflow.log_params(params)
 
-        'gap_lookback': trial.suggest_int('gap_lookback', 3, 9),
-        'gap_hull_period': trial.suggest_int('gap_hull_period', 4, 40),
-        'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 2, 15),
+        model_params = model_params_override or {
+            'n_estimators': trial.suggest_int('n_estimators', 350, 400),
+            'max_depth': trial.suggest_int('max_depth', 7, 8),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.02),
+            'subsample': trial.suggest_float('subsample', 0.95, 0.95),
+            'gamma':  trial.suggest_float('gamma', 0.95, 0.95),
+            # 'feature_fraction':  trial.suggest_float('feature_fraction', 0.9, 1),
+            # 'num_leaves':  trial.suggest_int('num_leaves', 10, 200),
 
-        'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.001, 0.004),
-        'tenkan_window': trial.suggest_int('tenkan_window', 4, 15), 
-        'kijun_window': trial.suggest_int('kijun_window', 10, 80), 
-        'cci_timeperiods': trial.suggest_int('cci_timeperiods', 3, 30),
-        'macd_fastperiod': trial.suggest_int('macd_fastperiod', 6, 18), 
-        'macd_slowperiod': trial.suggest_int('macd_slowperiod', 10, 40), 
-        'macd_signalperiod': trial.suggest_int('macd_signalperiod', 3, 15),
-        'price_distribution_window_size': trial.suggest_int('price_distribution_window_size', 5, 5),   # 5,50
-        'price_distribution_percentile_threshold': trial.suggest_float('price_distribution_percentile_threshold', 0.2, 0.2), # 0.2,0.5
-        'rsi_period': trial.suggest_int('rsi_period', 5, 40),
-        'rsi_slope_period': trial.suggest_int('rsi_slope_period', 3, 20),
-        'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 2, 15),
-        'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 2, 15),
-        'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 10, 30),
-        'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 3, 15),
-        'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 25, 45),
+            'sma1_period': trial.suggest_int('sma1_period', 2, 20),
+            'sma2_period': trial.suggest_int('sma2_period', 50, 100), 
+            'bb_periods': trial.suggest_int('bb_periods', 25, 60),
+            'bb_nbdev': trial.suggest_float('bb_nbdev', 2, 2.5),
+            'ema1_period': trial.suggest_int('ema1_period', 5, 10),
+            'ema2_period': trial.suggest_int('ema2_period', 10, 30),
+            'sar_acc': trial.suggest_float('sar_acc', 0.01, 0.5), 
+            'sar_max': trial.suggest_float('sar_max', 0.1, 1.5), 
+            'midprice_window': trial.suggest_int('midprice_window', 2, 2), # 2,30
+            'l1_fast': trial.suggest_int('l1_fast', 5, 20), # 15,3,10
+            'l2_fast': trial.suggest_int('l2_fast', 2, 5), 
+            'l3_fast': trial.suggest_int('l3_fast', 5, 15), 
+            'l1_slow': trial.suggest_int('l1_slow', 15, 40), 
+            'l2_slow': trial.suggest_int('l2_slow', 3, 6),
+            'l3_slow': trial.suggest_int('l3_slow', 15, 25),
+            'kama_trend_period': trial.suggest_int('kama_trend_period', 20, 40),
 
-        'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 7, 15),
-        'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 5, 25),
-        'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 3, 20),
-        'train_range_len': trial.suggest_int('train_range_len', 5, 5),  #10,15
-        'test_range_len': trial.suggest_int('test_range_len', 3, 5),  #3,5
-        'hour_range_start': trial.suggest_int('hour_range_start', 10, 11),
-        'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
-        'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
-        'di_timeperiod': trial.suggest_int('di_timeperiod', 5, 20),
-        'macd_slope_period': trial.suggest_int('macd_slope_period', 9, 9),
-        'sl': trial.suggest_float('sl', 0.002, 0.004),
-        'tp': trial.suggest_float('tp', 0.002, 0.005),
+            'ha_candle_period': trial.suggest_int('ha_candle_period', 10, 30), 
+            'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 10, 30), 
+            'displacement_strength_period': trial.suggest_int('displacement_strength_period', 15, 30), 
+            'displacement_strength': trial.suggest_float('displacement_strength', 1.1, 1.5),
+            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 20, 60), 
+            #    'displacement_sma_period': trial.suggest_int('displacement_sma_period', 2, 30), 
+            'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 5, 15),
 
-        'atr_period': trial.suggest_int('atr_period', 3, 3),
+            'gap_lookback': trial.suggest_int('gap_lookback', 4, 9),
+            'gap_hull_period': trial.suggest_int('gap_hull_period', 4, 40),
+            'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 3, 12),
 
-        'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 3, 10),
-        'stochk_slope_period': trial.suggest_int('stochk_slope_period', 3, 10),
-        'willr_timeperiod': trial.suggest_int('willr_timeperiod', 10, 30),
+            'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.001, 0.004),
+            'tenkan_window': trial.suggest_int('tenkan_window', 4, 12), 
+            'kijun_window': trial.suggest_int('kijun_window', 20, 80), 
+            'cci_timeperiods': trial.suggest_int('cci_timeperiods', 10, 30),
+            'macd_fastperiod': trial.suggest_int('macd_fastperiod', 5, 15), 
+            'macd_slowperiod': trial.suggest_int('macd_slowperiod', 10, 40), 
+            'macd_signalperiod': trial.suggest_int('macd_signalperiod', 3, 15),
+            'price_distribution_window_size': trial.suggest_int('price_distribution_window_size', 5, 5),   # 5,50
+            'price_distribution_percentile_threshold': trial.suggest_float('price_distribution_percentile_threshold', 0.2, 0.2), # 0.2,0.5
+            'rsi_period': trial.suggest_int('rsi_period', 10, 40),
+            'rsi_slope_period': trial.suggest_int('rsi_slope_period', 10, 20),
+            'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 2, 15),
+            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 2, 15),
+            'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 10, 30),
+            'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 3, 15),
+            'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 25, 45),
 
-        'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 4, 15),
+            'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 7, 15),
+            'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 4, 15),
+            'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 10, 20),
+            'train_range_len': trial.suggest_int('train_range_len', 10, 12),  #10,15
+            'test_range_len': trial.suggest_int('test_range_len', 4, 4),  #3,5
+            'hour_range_start': trial.suggest_int('hour_range_start', 10, 11),
+            'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
+            'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
+            'di_timeperiod': trial.suggest_int('di_timeperiod', 10, 25),
+            'macd_slope_period': trial.suggest_int('macd_slope_period', 9, 9),
+            'sl': trial.suggest_float('sl', 0.003, 0.005) if not params['evals_strategy'] else 0,
+            'tp': trial.suggest_float('tp', 0.002, 0.005) if not params['evals_strategy'] else trial.suggest_int('tp', 50, 150),
 
-        'target_tp': trial.suggest_float('target_tp', 0.002, 0.005),
-        'ema_period': trial.suggest_int('ema_period', 15, 20),
-        'ema_reversed_period': trial.suggest_int('ema_reversed_period', 5, 10),
-        'threshold_long': trial.suggest_float('threshold_long', 0.8, 0.85),
-        'threshold_short': trial.suggest_float('threshold_short', 0.15, 0.2),
-        'pred_ewm_span': trial.suggest_int('pred_ewm_span', 1, 5),
-    }
+            'atr_period': trial.suggest_int('atr_period', 5, 15),
 
-    data[index_base].loc[:,"labeling_binary"], data[index_base].loc[:,"labeling_dual_ema"], data[index_base].loc[:,"labeling_multi"] = build_target(data[index_base], \
-        open_col='Open', high_col='High', low_col='Low', high_time_col="high_time", low_time_col="low_time", \
-        tp=model_params['target_tp'], ema_period=model_params['ema_period'], ema_reversed_period=model_params['ema_reversed_period'], \
-        threshold_long=model_params['threshold_long'], threshold_short=model_params['threshold_short'])
+            'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 3, 10),
+            'stochk_slope_period': trial.suggest_int('stochk_slope_period', 3, 10),
+            'willr_timeperiod': trial.suggest_int('willr_timeperiod', 10, 30),
 
-    p={}
-    p[7] = model_params
-    p[10] = model_params
-    X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], cutoff_date, col_open="Open", col_high="High", col_low="Low", col_close="Close")
-    y=y+1
+            'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 5, 15),
 
-#    X = X.loc[(X.index.hour>=model_params['hour_range_start']) & (X.index.hour<=model_params['hour_range_stop'])]
+            'target_tp': trial.suggest_float('target_tp', 0.002, 0.004),
+            'ema_period': trial.suggest_int('ema_period', 15, 25),
+            'ema_reversed_period': trial.suggest_int('ema_reversed_period', 5, 10),
+            'threshold_long': trial.suggest_float('threshold_long', 0.8, 0.85),
+            'threshold_short': trial.suggest_float('threshold_short', 0.15, 0.2),
+            'pred_ewm_span': trial.suggest_int('pred_ewm_span', 1, 5),
+            'pca': trial.suggest_categorical('pca', [False]),
+        }
+        if params['evals_strategy']:
+            model_params['sl'] = model_params['tp'] // 1.5
 
-    #print(lag_f.get_feature_names_out())
+        data[index_base].loc[:,"labeling_binary"], data[index_base].loc[:,"labeling_dual_ema"], data[index_base].loc[:,"labeling_multi"] = build_target(data[index_base], \
+            open_col='Open', high_col='High', low_col='Low', high_time_col="high_time", low_time_col="low_time", \
+            tp=model_params['target_tp'], ema_period=model_params['ema_period'], ema_reversed_period=model_params['ema_reversed_period'], \
+            threshold_long=model_params['threshold_long'], threshold_short=model_params['threshold_short'])
 
-    #ml_data.to_csv('ml_data1.csv')
-    num_splits = 11
+        p={}
+        for i in indexes_higher:
+            p[i] = model_params
+        X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], cutoff_date, lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
+        y=y+1
 
-    # Split the dataset to test and train sets
-    # Split the initial 70% of the data as training set and the remaining 30% data as the testing set
-    num_mondays = len(mondays_indexes)
-    splits_array = LOG_SPLITS_TABLE[num_splits]
-    mondays_splits = [int(2 + (num_mondays-2) * (random()/2 + i) / num_splits) for i in splits_array] # range(1, num_splits)]
-    train_splits = [mondays_indexes[i] for i in mondays_splits]
-    print(train_splits)
-    scores = []
-    stats = []
-    sharpe = []
-    sortino = []
-    calmar = []
-    splits_all.append(train_splits)
-    total_score = 0
-    start_time = datetime.now()
-    print(start_time.strftime('%H:%M:%S'))
+        #X = X.loc[(X.index.hour>=model_params['hour_range_start']) & (X.index.hour<=model_params['hour_range_stop'])]
 
-    with mp.Pool(10) as p:
+        #print(lag_f.get_feature_names_out())
+
+        #ml_data.to_csv('ml_data1.csv')
+        num_splits = params['num_splits']
+
+        # Split the dataset to test and train sets
+        # Split the initial 70% of the data as training set and the remaining 30% data as the testing set
+        num_mondays = len(mondays_indexes)
+        splits_array = LOG_SPLITS_TABLE[num_splits]
+        mondays_splits = [int(4 + (num_mondays-4) * (random()/2 + i) / num_splits) for i in splits_array] # range(1, num_splits)]
+        train_splits = [mondays_indexes[i] for i in mondays_splits]
+        print(train_splits)
+
+        print(datetime.now().strftime('%H:%M:%S'))
+
+        mlflow.log_params(model_params)
+        mlflow.log_param('num_splits', num_splits)
+        mlflow.log_param('train_splits', train_splits)
+        mlflow.log_param('X_columns', X_columns)
+        mlflow.log_param('y_col', col_y[0])
+        mlflow.log_param('index_base', index_base)
+        mlflow.log_param('indexes_higher', indexes_higher)
+
         tuples = []
         for idx,i in enumerate(train_splits):
 
@@ -165,95 +201,266 @@ def objective(trial, data: dict, index_base: int, indexes_higher: list, timefram
             data_target['tp']=model_params['tp']
             data_target['DaytradingExit'] = ((data_target.index.date != data_target.index.to_series().shift(periods=-1).dt.date) | (data_target.index.date != data_target.index.to_series().shift(periods=-2).dt.date))
 
-
-#            data_target = data_target.join(ml_data['atr']).ffill().bfill()
+            #data_target = data_target.join(ml_data['atr']).ffill().bfill()
             tuples.append((X_train, X_test, y_train, y_test, data_target, model_params, 1))         # exponential_growth(1, 0.02, num_splits-idx-1)
 
-        results = p.starmap(do_backtest_Strategy2, tuples)
+        # with mp.Pool(10) as p:
+        with mp.Pool(8, maxtasksperchild=1) as p:
+            results = p.starmap(do_backtest_Strategy2, tuples)
+            p.close()
+            p.join()
+            p.terminate()
+        # if params['evals_strategy']:
+        #     results = p.starmap(do_backtest_Strategy2_evaluation, tuples)
+        # else:
+        #     results = p.starmap(do_backtest_Strategy2, tuples)
+        # p.close()
+        # p.join()
+        # p.terminate()
+
+        results.sort(key=lambda res: res[1]['Start'])
+
+        stats = [res[1] for res in results]
+
+        #        y_pred_all = y_pred_all.combine_first(res[0])
+        #    y_pred_all.to_csv('y_pred_all_opt1.csv')
+        profits = [s['Equity Final [$]']-100000 for s in stats]
+        total_trades = sum(s['# Trades'] for s in stats)
+
+        if total_trades == 0:
+            mlflow.log_metric('total_trades', 0)
+            mlflow.log_metric('total_profit', 0)
+            print(f"Run has no trades")
+            return 0
+
+        total_profit = np.nansum(profits)
+
+        print(f'Splits: {train_splits}')
+        print(f'Profits: {profits} Sum: {total_profit}')
+
+        sharpe = [s['Sharpe Ratio'] for s in stats]
+        sortino = [s['Sortino Ratio'] for s in stats]
+        calmar = [s['Calmar Ratio'] for s in stats]
+        sharpe_mean = np.nanmean(sharpe)
+        sortino_mean = np.nanmean(sortino)
+        calmar_mean = np.nanmean(calmar)
+
+        print(f'Sharpe: {sharpe} Avg: {sharpe_mean}')
+        print(f'Sortino: {sortino} Avg: {sortino_mean}')
+        print(f'Calmar: {calmar} Avg: {calmar_mean}')
+
+        mlflow.log_metric('sharpe_ratio', sharpe_mean)
+        mlflow.log_metric('sortino_mean', sortino_mean)
+        mlflow.log_metric('calmar_mean', calmar_mean)
+
+        mlflow.log_metric('total_profit', total_profit)
+        mlflow.log_metric('total_trades', total_trades)
+
+        total_return_percentage = total_profit/1000
+        mlflow.log_metric('total_return_percentage', total_return_percentage)
+        mlflow.log_metric('total_expectancy_percentage', total_return_percentage / total_trades)
+
+        wins = [ s['_trades'].loc[s['_trades']['PnL']>0,'PnL'] for s in stats ]
+        losses = [ s['_trades'].loc[s['_trades']['PnL']<0,'PnL'] for s in stats ]
+        draws = [ s['_trades'].loc[s['_trades']['PnL']==0,'PnL'] for s in stats ]
+        wins_value = sum([w.sum(skipna=True) for w in wins])
+        losses_value = sum([l.sum(skipna=True) for l in losses])
+        win_trades = sum([w.count() for w in wins])
+        loss_trades = sum([l.count() for l in losses])
+        avg_win = wins_value / win_trades
+        avg_loss = losses_value / loss_trades
+        mlflow.log_metric('avg_win', avg_win)
+        mlflow.log_metric('avg_loss', avg_loss)
+        mlflow.log_metric('draw_trades', sum([d.count() for d in draws]))
+
+        # win_trades = int(sum(np.where(np.isnan(s['Win Rate [%]']), 0, s['# Trades']*s['Win Rate [%]']/100) for s in stats))
+        # loss_trades = total_trades - win_trades
+        win_rate = win_trades / total_trades
+        mlflow.log_metric('win_trades', win_trades)
+        mlflow.log_metric('loss_trades', loss_trades)
+        mlflow.log_metric('win_rate', win_rate)
+        
+
+        mlflow.log_metric('profit_factor', -wins_value / losses_value)
+
+
+        sharpe_coeff = np.log(sharpe_mean) if sharpe_mean > 1 else sharpe_mean-1
+
+        if params['evals_strategy']:
+            optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) / np.log(model_params['test_range_len']-0.5) * (1 + sharpe_coeff/10 + win_rate + np.log(total_trades)/10 - avg_win/avg_loss/10)
+        else:
+            optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) / np.log(model_params['test_range_len']-0.5) * (1 + sharpe_coeff/10 + win_rate/10 + np.log(total_trades)/10 - avg_win/avg_loss/20) #* np.sqrt(max(np.mean(sortino)+np.mean(calmar), 1)) / (parameters['hour_range_stop']-parameters['hour_range_start']+2)
+
+        mlflow.log_metric('optimisation_score', optimisation_score)
+        
+        # try:
+        #     mlflow.log_metric('Avg_Drawdown_Duration_Seconds', int(sum(s['Avg. Drawdown Duration'].seconds*s['# Trades'] for s in stats) / total_trades))
+        # except Exception as e:
+        #     print(f"Error logging Avg_Drawdown_Duration_Seconds: {e}")
+        #     mlflow.log_metric('Avg_Drawdown_Duration_Seconds', 0)
+
+        for idx, res in enumerate(stats):
+            with mlflow.start_run(nested=True, run_name=f"{run_name}_Child_Run_{idx}") as child_run:
+
+                try:
+                    if res['# Trades']>0:
+                        # mlflow.log_metric('Start', int(res[5]['Start'].timestamp()))
+                        mlflow.log_metric('Start', res['Start'].year*10000+res['Start'].month*100+res['Start'].day)
+                        # mlflow.log_metric('End', int(res[5]['End'].timestamp()))
+                        mlflow.log_metric('End', res['End'].year*10000+res['End'].month*100+res['End'].day)
+                        mlflow.log_metric('Equity_Final', res['Equity Final [$]'])
+                        mlflow.log_metric('Equity_Peak', res['Equity Peak [$]'])
+                        mlflow.log_metric('Commissions', res['Commissions [$]'])
+                        mlflow.log_metric('Return_Percentage', res['Return [%]'])
+                        mlflow.log_metric('Buy_Hold_Return_Percentage', res['Buy & Hold Return [%]'])
+                        mlflow.log_metric('sharpe_ratio', res['Sharpe Ratio'])
+                        mlflow.log_metric('Sortino_Ratio', res['Sortino Ratio'])
+                        mlflow.log_metric('Calmar_Ratio', res['Calmar Ratio'])
+                        mlflow.log_metric('Max_Drawdown_Percentage', res['Max. Drawdown [%]'])
+                        mlflow.log_metric('Avg_Drawdown_Percentage', res['Avg. Drawdown [%]'])
+                        mlflow.log_metric('Max_Drawdown_Duration_Seconds', res['Max. Drawdown Duration'].seconds)
+                        mlflow.log_metric('Avg_Drawdown_Duration_Seconds', res['Avg. Drawdown Duration'].seconds)
+                        mlflow.log_metric('total_trades', res['# Trades'])
+                        mlflow.log_metric('win_rate', res['Win Rate [%]']/100)
+                        # mlflow.log_metric('Best_Trade_Percentage', res['Best Trade [%]'])
+                        # mlflow.log_metric('Worst_Trade_Percentage', res['Worst Trade [%]'])
+                        mlflow.log_metric('Avg_Trade_Percentage', res['Avg. Trade [%]'])
+                        mlflow.log_metric('Max_Trade_Duration_Seconds', res['Max. Trade Duration'].seconds)
+                        mlflow.log_metric('Avg_Trade_Duration_Seconds', res['Avg. Trade Duration'].seconds)
+                        mlflow.log_metric('profit_factor', res['Profit Factor'])
+                        mlflow.log_metric('Expectancy_Percentage', res['Expectancy [%]'])
+                        mlflow.log_metric('SQN', res['SQN'])
+                        mlflow.log_metric('Kelly_Criterion', res['Kelly Criterion'])
+
+                        wins = res['_trades'].loc[res['_trades']['PnL']>0,'PnL']
+                        losses = res['_trades'].loc[res['_trades']['PnL']<0,'PnL']
+                        avg_win = wins.sum(skipna=True) / wins.count() if wins.count() > 0 else 0
+                        avg_loss = losses.sum(skipna=True) / losses.count() if losses.count() > 0 else 0
+                        mlflow.log_metric('avg_win', avg_win)
+                        mlflow.log_metric('avg_loss', avg_loss)
+                        mlflow.log_metric('win_trades', wins.count())
+                        mlflow.log_metric('loss_trades', losses.count())
+
+                        draws = res['_trades'].loc[res['_trades']['PnL']==0,'PnL']
+                        mlflow.log_metric('draw_trades', draws.count())
+
+                    else:
+                        mlflow.log_metric('Start', res['Start'].year*10000+res['Start'].month*100+res['Start'].day)
+                        mlflow.log_metric('End', res['End'].year*10000+res['End'].month*100+res['End'].day)
+                        mlflow.log_metric('total_trades', res['# Trades'])
+                        print(f"Child run {idx} has no trades")
+
+                    # if idx == len(stats)-1:
+
+
+                except Exception as e:
+                    # mlflow.log_params(res[5])
+                    print(res)
+                    print(f"Error logging child run {idx}: {e}")
+
+        last_model_gpu = results[-1][2]
+        mlflow.xgboost.log_model(xgb_model=last_model_gpu, name='xgb_model_gpu',
+        # registered_model_name=f'xgb_model_gpu_{run_name}',
+        metadata={
+            'train_split': train_splits[-1],
+            'train_start': unique_dates[max(train_splits[-1]-model_params['train_range_len']*5, 1)],
+            'train_end': unique_dates[train_splits[-1]],
+        }, params={
+            'num_class': 3,
+            'device': 'gpu',
+            'learning_rate': model_params['learning_rate'],
+            'max_depth': model_params['max_depth'],
+            'subsample': model_params['subsample'],
+            'gamma': model_params['gamma'],
+            'objective': 'multi:softprob',
+            'eval_metric': 'auc',
+        })
+
+        importance_scores = last_model_gpu.get_score(importance_type='weight')
+        sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
+        with open(os.path.join(params['models_path'], f'importance_scores_weight.json'), "w") as file_name:
+            json.dump(sorted_by_values, file_name)
+        mlflow.log_artifact(os.path.join(params['models_path'], f'importance_scores_weight.json'), artifact_path='importance_scores')
+
+    return optimisation_score
+
+
+
+def train_register_model(trial, data: dict, params: dict, unique_dates: list, mondays_indexes: list, experiment_id: str, model_params: dict):
+
+    index_base = params['index_base']
+    indexes_higher = params['indexes_higher']
+    timeframes = params['timeframes']
+    timeframe_scalers = params['timeframe_scalers']
+    list_X = params['list_X']
+    col_y = params['col_y']
+    lags = params['lags']
     
-    results.sort(key=lambda res: res[5]['Start'])
-
-    for res in results:
-        scores.append(res[0])
-        sharpe.append(res[1])
-        sortino.append(res[2])
-        calmar.append(res[3])
-        stats.append(res[5])
-
-#        y_pred_all = y_pred_all.combine_first(res[4])
-#    y_pred_all.to_csv('y_pred_all_opt1.csv')
-
-    total_score = sum(scores)
-    scores_std=np.std(scores)
-
-    print(f'Splits: {train_splits}')
-    print(f'Profits: {scores} Sum: {total_score} Stddev: {scores_std}')
-
-    print(f'Sharpe: {sharpe} Avg: {np.mean(sharpe)}')
-    print(f'Sortino: {sortino} Avg: {np.mean(sortino)}')
-    print(f'Calmar: {calmar} Avg: {np.mean(calmar)}')
-
-
     # Set tracking URI
-    print("Setting MLFlow tracking and experiment ID for active run...")
-    mlflow.set_tracking_uri("http://localhost:5000/")
+    print("Setting MLFlow tracking and experiment ID...")
+    mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     mlflow.set_experiment(experiment_id=experiment_id)
     # print(f"Experiment ID: {experiment_id}")
 
-
-    for idx, res in enumerate(results):
-        with mlflow.start_run(nested=True, run_name=f"Child_Run_{idx}") as child_run:
-
-            try:
-                # mlflow.log_metric('Start', int(res[5]['Start'].timestamp()))
-                mlflow.log_metric('Start', res[5]['Start'].year*10000+res[5]['Start'].month*100+res[5]['Start'].day)
-                # mlflow.log_metric('End', int(res[5]['End'].timestamp()))
-                mlflow.log_metric('End', res[5]['End'].year*10000+res[5]['End'].month*100+res[5]['End'].day)
-                mlflow.log_metric('Equity_Final', res[5]['Equity Final [$]'])
-                mlflow.log_metric('Equity_Peak', res[5]['Equity Peak [$]'])
-                mlflow.log_metric('Commissions', res[5]['Commissions [$]'])
-                mlflow.log_metric('Return_Percentage', res[5]['Return [%]'])
-                mlflow.log_metric('Buy_Hold_Return_Percentage', res[5]['Buy & Hold Return [%]'])
-                mlflow.log_metric('Sharpe_Ratio', res[5]['Sharpe Ratio'])
-                mlflow.log_metric('Sortino_Ratio', res[5]['Sortino Ratio'])
-                mlflow.log_metric('Calmar_Ratio', res[5]['Calmar Ratio'])
-                mlflow.log_metric('Max_Drawdown_Percentage', res[5]['Max. Drawdown [%]'])
-                mlflow.log_metric('Avg_Drawdown_Percentage', res[5]['Avg. Drawdown [%]'])
-                mlflow.log_metric('Max_Drawdown_Duration_Seconds', res[5]['Max. Drawdown Duration'].seconds)
-                mlflow.log_metric('Avg_Drawdown_Duration_Seconds', res[5]['Avg. Drawdown Duration'].seconds)
-                mlflow.log_metric('Num_Trades', res[5]['# Trades'])
-                mlflow.log_metric('Win_Rate_Percentage', res[5]['Win Rate [%]'])
-                mlflow.log_metric('Best_Trade_Percentage', res[5]['Best Trade [%]'])
-                mlflow.log_metric('Worst_Trade_Percentage', res[5]['Worst Trade [%]'])
-                mlflow.log_metric('Avg_Trade_Percentage', res[5]['Avg. Trade [%]'])
-                mlflow.log_metric('Max_Trade_Duration_Seconds', res[5]['Max. Trade Duration'].seconds)
-                mlflow.log_metric('Avg_Trade_Duration_Seconds', res[5]['Avg. Trade Duration'].seconds)
-                mlflow.log_metric('Profit_Factor', res[5]['Profit Factor'])
-                mlflow.log_metric('Expectancy_Percentage', res[5]['Expectancy [%]'])
-                mlflow.log_metric('SQN', res[5]['SQN'])
-                mlflow.log_metric('Kelly_Criterion', res[5]['Kelly Criterion'])
-                print(f"Child run {idx} logging ended")
-            except Exception as e:
-                # mlflow.log_params(res[5])
-                print(res[5])
-                print(f"Error logging child run {idx}: {e}")
-
-    return total_score + np.mean(np.sort(scores)[:3]) #* np.sqrt(max(np.mean(sortino)+np.mean(calmar), 1)) / (parameters['hour_range_stop']-parameters['hour_range_start']+2)
+    # mlflow.xgboost.autolog()
+    run_name = f"Train_Register_Model_{unique_dates[mondays_indexes[-1]]}"
+    with mlflow.start_run(run_name=run_name) as run:
+        mlflow.log_params(params)
 
 
+        data[index_base].loc[:,"labeling_binary"], data[index_base].loc[:,"labeling_dual_ema"], data[index_base].loc[:,"labeling_multi"] = build_target(data[index_base], \
+            open_col='Open', high_col='High', low_col='Low', high_time_col="high_time", low_time_col="low_time", \
+            tp=model_params['target_tp'], ema_period=model_params['ema_period'], ema_reversed_period=model_params['ema_reversed_period'], \
+            threshold_long=model_params['threshold_long'], threshold_short=model_params['threshold_short'])
 
-# def save_model_info(run_id: str, model_path: str, file_path: str) -> None:
-#     """Save the model run ID and path to a JSON file."""
-#     try:
-#         # Create a dictionary with the info you want to save
-#         model_info = {
-#             'run_id': run_id,
-#             'model_path': model_path
-#         }
-#         # Save the dictionary as a JSON file
-#         with open(file_path, 'w') as file:
-#             json.dump(model_info, file, indent=4)
-#         logger.debug('Model info saved to %s', file_path)
-#     except Exception as e:
-#         logger.error('Error occurred while saving the model info: %s', e)
-#         raise
+        p={}
+        for i in indexes_higher:
+            p[i] = model_params
+        X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], date(2023,1,1), lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
+        y=y+1
+
+        train_splits = mondays_indexes[-1:]
+        print(train_splits)
+
+        print(datetime.now().strftime('%H:%M:%S'))
+
+        mlflow.log_params(model_params)
+        mlflow.log_param('train_splits', train_splits)
+        mlflow.log_param('X_columns', X_columns)
+        mlflow.log_param('y_col', col_y[0])
+        mlflow.log_param('index_base', index_base)
+        mlflow.log_param('indexes_higher', indexes_higher)
+
+
+        train_split = unique_dates[train_splits[-1]]
+        train_start_idx = unique_dates[max(train_splits[-1]-model_params['train_range_len']*5, 1)]
+
+        X_train = X.loc[(X.index.date>train_start_idx) & (X.index.date<=train_split)]
+        y_train = y.loc[(X.index.date>train_start_idx) & (X.index.date<=train_split)]
+
+        model_gpu = do_backtest_Strategy2_training(X_train, y_train, model_params)
+        
+        mlflow.xgboost.log_model(xgb_model=model_gpu, name='xgb_model_gpu',
+        # registered_model_name=f'xgb_model_gpu_{run_name}',
+        metadata={
+            'train_split': train_splits[-1],
+            'train_start': train_start_idx,
+            'train_end': train_split,
+        }, params={
+            'num_class': 3,
+            'device': 'gpu',
+            'learning_rate': model_params['learning_rate'],
+            'max_depth': model_params['max_depth'],
+            'subsample': model_params['subsample'],
+            'gamma': model_params['gamma'],
+            'objective': 'multi:softprob',
+            'eval_metric': 'auc',
+        })
+
+        importance_scores = model_gpu.get_score(importance_type='weight')
+        sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
+        with open(os.path.join(params['models_path'], f'importance_scores_weight.json'), "w") as file_name:
+            json.dump(sorted_by_values, file_name)
+        mlflow.log_artifact(os.path.join(params['models_path'], f'importance_scores_weight.json'), artifact_path='importance_scores')
+
+

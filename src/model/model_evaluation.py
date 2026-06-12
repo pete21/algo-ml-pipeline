@@ -1,18 +1,16 @@
 import numpy as np
 import pandas as pd
-import pickle
 import logging
 import mlflow
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.feature_extraction.text import TfidfVectorizer
 import os
-import matplotlib.pyplot as plt
-import seaborn as sns
+# import matplotlib.pyplot as plt
+# import seaborn as sns
 import json
 from datetime import date
 from mlflow.models import infer_signature
 from mlflow.tracking import MlflowClient
 
+from src.backtesting.optimization import objective
 from src.data_utils.utils import load_params, get_dates
 from src.model.model_building import load_data
 
@@ -45,28 +43,28 @@ logger.addHandler(file_handler)
 
 
 
-def load_model(model_path: str):
-    """Load the trained model."""
-    try:
-        with open(model_path, 'rb') as file:
-            model = pickle.load(file)
-        logger.debug('Model loaded from %s', model_path)
-        return model
-    except Exception as e:
-        logger.error('Error loading model from %s: %s', model_path, e)
-        raise
+# def load_model(model_path: str):
+#     """Load the trained model."""
+#     try:
+#         with open(model_path, 'rb') as file:
+#             model = pickle.load(file)
+#         logger.debug('Model loaded from %s', model_path)
+#         return model
+#     except Exception as e:
+#         logger.error('Error loading model from %s: %s', model_path, e)
+#         raise
 
 
-def load_vectorizer(vectorizer_path: str) -> TfidfVectorizer:
-    """Load the saved TF-IDF vectorizer."""
-    try:
-        with open(vectorizer_path, 'rb') as file:
-            vectorizer = pickle.load(file)
-        logger.debug('TF-IDF vectorizer loaded from %s', vectorizer_path)
-        return vectorizer
-    except Exception as e:
-        logger.error('Error loading vectorizer from %s: %s', vectorizer_path, e)
-        raise
+# def load_vectorizer(vectorizer_path: str) -> TfidfVectorizer:
+#     """Load the saved TF-IDF vectorizer."""
+#     try:
+#         with open(vectorizer_path, 'rb') as file:
+#             vectorizer = pickle.load(file)
+#         logger.debug('TF-IDF vectorizer loaded from %s', vectorizer_path)
+#         return vectorizer
+#     except Exception as e:
+#         logger.error('Error loading vectorizer from %s: %s', vectorizer_path, e)
+#         raise
 
 
 def find_latest_building_experiment(client: MlflowClient):
@@ -135,51 +133,21 @@ def load_model_params_from_building_experiment(client: MlflowClient) -> dict:
     return model_params
 
 
-def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray):
-    """Evaluate the model and log classification metrics and confusion matrix."""
-    try:
-        # Predict and calculate classification metrics
-        y_pred = model.predict(X_test)
-        report = classification_report(y_test, y_pred, output_dict=True)
-        cm = confusion_matrix(y_test, y_pred)
-        
-        logger.debug('Model evaluation completed')
-
-        return report, cm
-    except Exception as e:
-        logger.error('Error during model evaluation: %s', e)
-        raise
-
-
-def log_confusion_matrix(cm, dataset_name):
-    """Log confusion matrix as an artifact."""
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-    plt.title(f'Confusion Matrix for {dataset_name}')
-    plt.xlabel('Predicted')
-    plt.ylabel('Actual')
-
-    # Save confusion matrix plot as a file and log it to MLflow
-    cm_file_path = f'confusion_matrix_{dataset_name}.png'
-    plt.savefig(cm_file_path)
-    mlflow.log_artifact(cm_file_path)
-    plt.close()
-
-def save_model_info(run_id: str, model_path: str, file_path: str) -> None:
-    """Save the model run ID and path to a JSON file."""
-    try:
-        # Create a dictionary with the info you want to save
-        model_info = {
-            'run_id': run_id,
-            'model_path': model_path
-        }
-        # Save the dictionary as a JSON file
-        with open(file_path, 'w') as file:
-            json.dump(model_info, file, indent=4)
-        logger.debug('Model info saved to %s', file_path)
-    except Exception as e:
-        logger.error('Error occurred while saving the model info: %s', e)
-        raise
+# def save_model_info(run_id: str, model_path: str, file_path: str) -> None:
+#     """Save the model run ID and path to a JSON file."""
+#     try:
+#         # Create a dictionary with the info you want to save
+#         model_info = {
+#             'run_id': run_id,
+#             'model_path': model_path
+#         }
+#         # Save the dictionary as a JSON file
+#         with open(file_path, 'w') as file:
+#             json.dump(model_info, file, indent=4)
+#         logger.debug('Model info saved to %s', file_path)
+#     except Exception as e:
+#         logger.error('Error occurred while saving the model info: %s', e)
+#         raise
 
 
 def main():
@@ -189,27 +157,42 @@ def main():
 
     # Load parameters from the root directory
     params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
-    # model_params = load_json_params(os.path.join(root_dir, 'model_params.json'), logger=logger)
 
     # Load the preprocessed data from the interim directory
-    data = load_data(data_path=params['model_building']['data_path'], params=params)
+    data = load_data(data_path=params['model_evaluation']['data_path'], params=params)
     
-    cutoff_date = date(2024,6,1)
+    cutoff_date = date(2025,1,2)
     for d in data:
-        data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(14, "D")]
+        data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
     unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
     print(mondays_indexes)
-    splits_all = []
 
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     client = MlflowClient()
     model_params = load_model_params_from_building_experiment(client)
     print(f"Loaded model params: {model_params}")
 
+    experiment = find_latest_building_experiment(client)
+    experiment_id = experiment.experiment_id
+    optimisation_score = objective(None, data, params['model_evaluation'], cutoff_date, unique_dates, mondays_indexes, experiment_id, model_params_override=model_params)
+    print(f"Optimisation score: {optimisation_score}")
 
 
+    print(f"Searching for run_id with run name: Evaluation")
+    # get run_id with run name 
+    run_object = mlflow.search_runs(filter_string=f"run_name = 'Evaluation'")
+    run_id = run_object["run_id"][0]
 
+    # tags = {
+    #     "project_name": "xgb-dax-pipeline",
+    #     "stage": "evaluation",
+    #     "mlflow.note.content": params['model_evaluation']['note'],
+    # }
+    # print("Setting tags for experiment: ", tags)
+    # mlflow.set_experiment_tags(tags)
 
+    with mlflow.start_run(run_id=run_id) as run:
+        mlflow.log_metric('optimisation_score', optimisation_score)
 
 
 if __name__ == '__main__':
