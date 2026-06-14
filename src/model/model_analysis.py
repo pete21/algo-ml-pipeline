@@ -106,6 +106,7 @@ def plot_param_correlations(
 def save_model_param_histograms(
     trial_runs_df: pd.DataFrame,
     model_param_names: list[str],
+    model_params: dict,
     output_dir: str,
 ) -> list[str]:
     """Save one histogram PNG per model parameter and return the saved file paths."""
@@ -122,16 +123,41 @@ def save_model_param_histograms(
         if series.empty:
             continue
 
+        reference_value = model_params.get(name)
+
         fig, ax = plt.subplots(figsize=(8, 5))
         numeric_series = pd.to_numeric(series, errors="coerce")
         if numeric_series.notna().all():
             ax.hist(numeric_series, bins="auto", edgecolor="black", alpha=0.7)
             ax.set_xlabel(name)
+            reference_numeric = pd.to_numeric(reference_value, errors="coerce")
+            if pd.notna(reference_numeric):
+                ax.axvline(
+                    reference_numeric,
+                    color="#d62728",
+                    linestyle="--",
+                    linewidth=2,
+                    label="model_params artifact",
+                )
         else:
             counts = series.astype(str).value_counts().sort_index()
-            ax.bar(counts.index.astype(str), counts.values, edgecolor="black", alpha=0.7)
+            labels = counts.index.astype(str).tolist()
+            ax.bar(labels, counts.values, edgecolor="black", alpha=0.7)
             ax.set_xlabel(name)
             plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+            if reference_value is not None:
+                reference_label = str(reference_value)
+                if reference_label in labels:
+                    ax.axvline(
+                        labels.index(reference_label),
+                        color="#d62728",
+                        linestyle="--",
+                        linewidth=2,
+                        label="model_params artifact",
+                    )
+
+        if ax.get_legend_handles_labels()[0]:
+            ax.legend()
 
         ax.set_ylabel("Count")
         ax.set_title(f"Distribution of {name}")
@@ -190,6 +216,7 @@ def main():
     histogram_paths = save_model_param_histograms(
         trial_runs_df,
         list(model_params.keys()),
+        model_params,
         histograms_dir,
     )
     print(f"Saved {len(histogram_paths)} parameter histograms to {histograms_dir}")
