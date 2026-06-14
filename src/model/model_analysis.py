@@ -59,7 +59,8 @@ def compute_param_metric_correlations(
     target_metrics: tuple[str, ...] = TARGET_METRICS,
 ) -> pd.DataFrame:
     """Correlate numeric model parameters with the requested trial metrics."""
-    numeric_params = _numeric_model_param_columns(trial_runs_df, model_param_names)
+    # numeric_params = _numeric_model_param_columns(trial_runs_df, model_param_names)
+    numeric_params = model_param_names
     metric_cols = [f"metrics.{metric}" for metric in target_metrics]
     missing_metrics = [
         metric for metric, col in zip(target_metrics, metric_cols) if col not in trial_runs_df.columns
@@ -102,6 +103,48 @@ def plot_param_correlations(
     plt.close(fig)
 
 
+def save_model_param_histograms(
+    trial_runs_df: pd.DataFrame,
+    model_param_names: list[str],
+    output_dir: str,
+) -> list[str]:
+    """Save one histogram PNG per model parameter and return the saved file paths."""
+    os.makedirs(output_dir, exist_ok=True)
+    saved_paths = []
+
+    for name in model_param_names:
+        col = f"params.{name}"
+        if col not in trial_runs_df.columns:
+            logger.warning("Parameter '%s' not found in trial runs dataframe", name)
+            continue
+
+        series = trial_runs_df[col].dropna()
+        if series.empty:
+            continue
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        numeric_series = pd.to_numeric(series, errors="coerce")
+        if numeric_series.notna().all():
+            ax.hist(numeric_series, bins="auto", edgecolor="black", alpha=0.7)
+            ax.set_xlabel(name)
+        else:
+            counts = series.astype(str).value_counts().sort_index()
+            ax.bar(counts.index.astype(str), counts.values, edgecolor="black", alpha=0.7)
+            ax.set_xlabel(name)
+            plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+
+        ax.set_ylabel("Count")
+        ax.set_title(f"Distribution of {name}")
+        fig.tight_layout()
+
+        output_path = os.path.join(output_dir, f"{name}.png")
+        fig.savefig(output_path, dpi=150)
+        plt.close(fig)
+        saved_paths.append(output_path)
+
+    return saved_paths
+
+
 def main():
     print("Starting model analysis process...")
     # Get root directory and resolve the path for params.yaml
@@ -110,7 +153,7 @@ def main():
     # Load parameters from the root directory
     params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
 
-
+    target_metrics = params['model_analysis']['target_metrics']
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
     model_params = load_model_params_from_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')), logger=logger)
@@ -127,6 +170,7 @@ def main():
     correlations_df = compute_param_metric_correlations(
         trial_runs_df,
         list(model_params.keys()),
+        target_metrics,
     )
     print(correlations_df.head())
 
@@ -136,10 +180,50 @@ def main():
     correlations_df.to_csv(correlations_path, index=False)
     print(f"Saved correlations to {correlations_path}")
 
-    for metric in TARGET_METRICS:
+    for metric in target_metrics:
         plot_path = os.path.join(analysis_dir, f"param_correlations_{metric}.png")
         plot_param_correlations(correlations_df, metric, plot_path)
         print(f"Saved correlation plot to {plot_path}")
+
+
+    histograms_dir = os.path.join(analysis_dir, "histograms")
+    histogram_paths = save_model_param_histograms(
+        trial_runs_df,
+        list(model_params.keys()),
+        histograms_dir,
+    )
+    print(f"Saved {len(histogram_paths)} parameter histograms to {histograms_dir}")
+
+    best_run_name = experiment.tags.get("best_run_name")
+    if not best_run_name:
+        raise ValueError(
+            f"Experiment '{experiment.name}' (id={experiment.experiment_id}) "
+            "is missing the 'best_run_name' tag"
+        )
+
+    run_id = experiment.tags.get("best_run_id")
+    if not run_id:
+        print(f"Searching for run_id with run name: {best_run_name}")
+        run_object = mlflow.search_runs(
+            experiment_ids=[experiment_id],
+            filter_string=f"run_name = '{best_run_name}'",
+        )
+        if run_object.empty:
+            raise ValueError(
+                f"No run named '{best_run_name}' found in experiment "
+                f"'{experiment.name}' (id={experiment_id})"
+            )
+        run_id = run_object.iloc[0]["run_id"]
+
+    with mlflow.start_run(run_id=run_id) as run:
+        mlflow.log_artifact(local_path=correlations_path, artifact_path='correlations')
+        for metric in target_metrics:
+            plot_path = os.path.join(analysis_dir, f"param_correlations_{metric}.png")
+            mlflow.log_artifact(local_path=plot_path, artifact_path='correlations')
+        mlflow.log_artifacts(local_dir=histograms_dir, artifact_path='histograms')
+        print(f"Logged {len(histogram_paths)} histograms to MLflow artifact path 'histograms'")
+
+
 
 
 if __name__ == '__main__':
