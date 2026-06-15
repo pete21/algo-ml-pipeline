@@ -1,0 +1,10 @@
+boto3
+fastapi
+mlflow
+numpy
+pandas
+python-dotenv
+scikit-learn
+scipy
+uvicorn[standard]
+xgboost

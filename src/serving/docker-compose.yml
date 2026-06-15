@@ -1,0 +1,15 @@
+services:
+  model-serving:
+    build:
+      context: ../..
+      dockerfile: src/serving/Dockerfile
+    image: algo-ml-model-serving:latest
+    ports:
+      - "${MODEL_SERVE_PORT:-8000}:${MODEL_SERVE_PORT:-8000}"
+    env_file:
+      - .env
+    environment:
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://host.docker.internal:5000/}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
