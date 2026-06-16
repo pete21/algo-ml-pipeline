@@ -4,6 +4,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+import dvc.api
 import pandas as pd
 from src.data_utils.utils import getXy, load_params, get_dates
 from src.backtesting.optimization import objective
@@ -13,7 +14,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-PREDICT_URL = os.getenv("MODEL_PREDICT_URL", "http://localhost:8000/predict")
+PREDICT_URL = os.getenv("MODEL_PREDICT_URL", "http://localhost:8100/predict")
+MODEL_PARAMS_URL = os.getenv("MODEL_PARAMS_URL", "http://localhost:8100/model/params")
 
 
 # logging configuration
@@ -87,20 +89,37 @@ def request_predictions(X: pd.DataFrame, url: str = PREDICT_URL, n_rows: int = 1
         ) from exc
 
 
+def fetch_model_params(url: str = MODEL_PARAMS_URL) -> dict:
+    """Fetch model_params from the model serving endpoint."""
+    request = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8")
+        raise RuntimeError(
+            f"Model params request failed with status {exc.code}: {error_body}"
+        ) from exc
+
+
 def main():
-    print("Starting model inference trade process...")
+    print("Starting model inference process...")
     try:
         # Get root directory and resolve the path for params.yaml
         root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
 
         # Load parameters from the root directory
-        params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
+        params = dvc.api.params_show('params.yaml')
         # model_params = load_json_params(os.path.join(root_dir, 'model_params.json'), logger=logger)
 
         # Load the preprocessed data from the interim directory
         data = load_data(data_path=params['model_building']['data_path'], params=params)
+
+        model_params = fetch_model_params()
+        print(f"Loaded model params: {model_params}")
+
         
-        X, y, columns = getXy(data, params['model_building']['index_base'], params['model_building']['indexes_higher'], params['model_building'], params['model_building']['timeframe_scalers'], params['model_building']['list_X'], params['model_building']['col_y'], date(2026,1,1), params['model_building']['lags'], col_open="Open", col_high="High", col_low="Low", col_close="Close")
+        X, y, columns = getXy(data, params['model_building']['index_base'], params['model_building']['indexes_higher'], model_params, params['model_building']['timeframe_scalers'], params['model_building']['list_X'], params['model_building']['col_y'], date(2026,1,1), params['model_building']['lags'], col_open="Open", col_high="High", col_low="Low", col_close="Close")
         print(X.head())
         print(y.head())
         print(columns)

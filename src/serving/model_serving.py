@@ -51,7 +51,7 @@ def load_registered_model(
     tracking_uri: str,
     registered_model_name: str,
     model_version_alias: str,
-) -> tuple[Any, Any, str, Any, Optional[dict]]:
+) -> tuple[Any, Any, str, Any, dict, Optional[dict]]:
     """Load a registered MLflow XGBoost model and its metadata."""
     client = MlflowClient(tracking_uri=tracking_uri)
     model_version_info = client.get_model_version_by_alias(
@@ -61,6 +61,22 @@ def load_registered_model(
     model_uri = model_version_info.source
     model_info = get_model_info(model_uri)
     model = mlflow.xgboost.load_model(model_uri)
+
+    artifact_dir = mlflow.artifacts.download_artifacts(
+        run_id=model_version_info.run_id,
+        artifact_path="model_params",
+    )
+    json_files = [
+        os.path.join(artifact_dir, filename)
+        for filename in os.listdir(artifact_dir)
+        if filename.endswith(".json")
+    ]
+    if not json_files:
+        raise ValueError(
+            f"No JSON model_params artifact found for run_id={model_version_info.run_id}"
+        )
+    with open(json_files[0], "r", encoding="utf-8") as file:
+        model_params = json.load(file)
 
     example_data = None
     if model_info.saved_input_example_info:
@@ -74,7 +90,7 @@ def load_registered_model(
         with open(local_path, "r", encoding="utf-8") as file:
             example_data = json.load(file)
 
-    return model, model_info, model_uri, model_version_info, example_data
+    return model, model_info, model_uri, model_version_info, model_params, example_data
 
 
 def build_serving_app(
@@ -83,6 +99,7 @@ def build_serving_app(
     model_uri: str,
     registered_model_name: str,
     model_version_info: Any,
+    model_params: dict,
     example_data: Optional[dict] = None,
 ) -> FastAPI:
     """Create a FastAPI app with Swagger docs derived from the MLflow input signature."""
@@ -119,11 +136,16 @@ def build_serving_app(
             "input_features": len(input_names),
             "docs_url": "/docs",
             "openapi_url": "/openapi.json",
+            "model_params": model_params,
         }
 
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/model/params")
+    def get_model_params() -> dict[str, Any]:
+        return model_params
 
     @app.get("/model/signature")
     def model_signature() -> dict[str, Any]:
@@ -149,6 +171,9 @@ def build_serving_app(
     def predict(payload: TabularPredictRequest) -> dict[str, Any]:
         df = pd.DataFrame(payload.data, columns=payload.columns)
         return {"predictions": _predict_dataframe(df)}
+# def predict(model_input: input_model) -> dict[str, Any]:
+#     row = pd.DataFrame([model_input.model_dump()], columns=input_names)
+#     return {"predictions": _predict_dataframe(row)}
 
     @app.post("/predict/batch")
     def predict_batch(batch_input: batch_input_model) -> dict[str, Any]:
