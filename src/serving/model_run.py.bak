@@ -1,0 +1,236 @@
+import json
+import os
+from typing import Dict, Any, Type
+from mlflow.models import get_model_info
+from mlflow import MlflowClient
+import mlflow
+import pydantic
+from fastapi import FastAPI, HTTPException, Response, status
+import pandas as pd
+from dotenv import load_dotenv
+from xgboost import DMatrix
+from ray import serve
+load_dotenv()
+
+
+MLFLOW_TYPE_MAP = {
+    "boolean": bool,
+    "integer": int,
+    "long": int,
+    "float": float,
+    "double": float,
+    "string": str,
+    "binary": bytes,
+    "datetime": str,  # Or datetime object if preferred
+}
+
+# Set model version alias
+model_name = os.getenv('MODEL_NAME')
+registered_model_name = f"{model_name}_20260525"
+model_version_alias = "Staging"
+
+client = MlflowClient(tracking_uri=os.getenv('MLFLOW_TRACKING_URI'))
+
+# def schema_to_pydantic(schema: mlflow.types.schema.Schema, *, name: str) -> pydantic.BaseModel:
+#     return pydantic.create_model(
+#         name,
+#         **{
+#             k: (v.type.to_python(), pydantic.Field(required=True))
+#             for k, v in schema.to_dict() #input_dict().items()
+#         }
+#     )
+
+def create_pydantic_model_from_signature(schema: mlflow.types.schema.Schema, name: str) -> Type[pydantic.BaseModel]:
+    """
+    Loads an MLflow model's metadata and dynamically constructs a Pydantic 
+    BaseModel class matching its input signature.
+    """
+    
+    if not schema:
+        raise ValueError(f"The schema does not have an input/output signature defined.")
+        
+    # Extract the schema inputs
+    inputs = schema.to_dict()
+    
+    # Construct fields dictionary for pydantic.create_model
+    # Format: { "field_name": (type_hint, Field_configuration) }
+    fields_spec: Dict[str, Any] = {}
+    
+    for field in inputs:
+        name = field.get("name")
+        mlflow_type = field.get("type")
+        
+        # fallback to Any if type is unrecognized
+        python_type = MLFLOW_TYPE_MAP.get(mlflow_type, Any)
+        
+        # Enforce required vs optional based on your needs 
+        # (MLflow schemas don't flag fields as required, we default to required here)
+        fields_spec[name] = (python_type, pydantic.Field(..., description=f"MLflow type: {mlflow_type}"))
+        
+    # Dynamically build and return the Pydantic BaseModel subclass
+    return pydantic.create_model(name, **fields_spec)
+
+
+
+def get_req_resp_signatures(model_signature: mlflow.models.ModelSignature) -> tuple[pydantic.BaseModel, pydantic.BaseModel]:
+    inputs: mlflow.types.schema.Schema = model_signature.inputs
+    # outputs: mlflow.types.schema.Schema = model_signature.outputs
+
+    # return (schema_to_pydantic(inputs, name="InputModel"), schema_to_pydantic(outputs, name="OutputModel"))
+    return create_pydantic_model_from_signature(inputs, name="InputModel") #, create_pydantic_model_from_signature(outputs, name="OutputModel"))
+
+
+def deployment_from_model_name_and_alias(registered_model_name: str, model_version_alias: str):
+
+    model_version_info = client.get_model_version_by_alias(registered_model_name, model_version_alias)
+    print(model_version_info)
+
+    # Get the model version using a model URI
+    # model_uri = f"models:/{registered_model_name}@{model_version_alias}"
+    model_uri = model_version_info.source
+    print(model_uri)
+
+    model_info = get_model_info(model_uri)
+    print(model_info)
+    # model_info = mlflow.models.get_model_info(f"models:/{model_name}/{default_version}")
+    input_datamodel: Type[pydantic.BaseModel] = get_req_resp_signatures(model_info.signature)
+    # Inspect your newly created model schema
+    print("Generated Pydantic Schema JSON:")
+    print(input_datamodel.model_json_schema())
+    print(input_datamodel.model_fields)
+    # print(output_datamodel)
+
+
+
+    app = FastAPI()
+
+
+    @serve.deployment(name=registered_model_name)
+    @serve.ingress(app)
+    class DynamicallyDefinedDeployment:
+
+        # MODEL_NAME: str = registered_model_name
+
+        @serve.multiplexed(max_num_models_per_replica=2)
+        async def get_model(self, model_uri: str):
+
+            try:
+                model = mlflow.xgboost.load_model(model_uri)
+                # print(model)
+            except Exception as e:
+                raise RuntimeError(f"Failed to load model from {model_uri}: {e}")
+
+            if model.metadata.get_model_info().signature != model_info.signature:
+                raise ValueError(f"Incompatible signature")
+            return model
+
+        # TODO: Extend this to support batching (lists of inputs and outputs)
+
+        @app.post("/serve") #, response_model=list[output_datamodel])
+        async def serve(self, model_input: input_datamodel, response: Response):
+            model_id = serve.get_multiplexed_model_id()
+            if model_id == "":
+                model_id = model_version_info.source
+
+            try:
+                model = await self.get_model(model_id)
+            except ValueError:
+                response.status_code = status.HTTP_409_CONFLICT
+                return [{"error": "Model loading failed"}]
+
+            return model.predict(model_input.dict())
+
+    return DynamicallyDefinedDeployment
+
+
+
+deployment = deployment_from_model_name_and_alias(registered_model_name, model_version_alias)
+
+serve.run(deployment.bind(), blocking=False)
+
+
+
+
+
+# Get information about the model
+# client = MlflowClient(tracking_uri=os.getenv('MLFLOW_TRACKING_URI'))
+
+
+# print(model_info.registered_model_version)
+
+# print(model_info)
+# print("Current signature:")
+# print(len(model_info.signature.inputs))
+# print(len(model_info.signature.outputs))
+# print(model_info.signature)
+
+# path = f"{model_name}/{model_info.saved_input_example_info['artifact_path']}"
+
+# local_path = client.download_artifacts(
+#     run_id=model_version_info.run_id, 
+#     path=path
+# )
+
+# # Load the saved example data
+# with open(local_path, "r") as f:
+#     example_data = json.load(f)
+
+# print(example_data)
+# print(len(example_data['data'][0]))
+
+
+
+
+
+# app = FastAPI()
+
+
+
+# # class Xgb_Dax_Model_Features(BaseModel):
+# #     fixed_acidity: float
+    
+# @app.get("/")
+# def root():
+#     return {"message": "Xgb_Dax_Model Prediction API", "model_uri": model_uri}
+
+# @app.get("/test")
+# def test_prediction():
+#     try:
+#         df_predict = pd.DataFrame(example_data['data'], columns=example_data['columns'])
+
+#         predictions = model.predict(DMatrix(df_predict))
+#         # print(predictions)
+#         # print(predictions.shape)
+#         return {"test_prediction": predictions}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Test prediction failed: {e}")
+
+# @app.post("/predict/")
+# def predict(wine: Xgb_Dax_Model_Features):
+#     try:
+#         row = pd.DataFrame([{
+#             "fixed acidity": wine.fixed_acidity,
+#             "volatile acidity": wine.volatile_acidity,
+#             "citric acid": wine.citric_acid,
+#             "residual sugar": wine.residual_sugar,
+#             "chlorides": wine.chlorides,
+#             "free sulfur dioxide": wine.free_sulfur_dioxide,
+#             "total sulfur dioxide": wine.total_sulfur_dioxide,
+#             "density": wine.density,
+#             "pH": wine.pH,
+#             "sulphates": wine.sulphates,
+#             "alcohol": wine.alcohol
+#         }])
+#         pred = model.predict(row)
+#         return {"prediction": float(pred[0])}
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=f"Prediction error: {e}")
+
+# if __name__ == "__main__":
+
+
+
+#     import uvicorn
+#     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# print(model)

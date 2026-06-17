@@ -4,8 +4,8 @@ data_ingestion:
   ticker: 'DAX40_USDT_USDT'
   timeframe: '1m'
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
-  timeframe_minutes: [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 60, 120, 240, 1440]
   timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
+  timeframe_minutes: [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 60, 120, 240, 1440]
   indexes: [1,5,7,10]
   index_barrier: 1
   index_base: 5
@@ -153,15 +153,15 @@ model_building:
   model_name: 'xgboost_model_with_pca_v1'
   model_params_name: 'model_params_{timeframe}_v{version}.json'
   n_trials: 2
-  num_splits: 9
+  num_splits: 17
   note: 'xgb-dax-pipeline with PCA'
   evals_strategy: False
 
 
 model_evaluation:
-  data_path: 'data/interim'
-  models_path: 'data/models'
-  timeframe: '5m'
+  # data_path: 'data/interim'
+  # models_path: 'data/models'
+  # timeframe: '5m'
   index_base: 5
   indexes_higher: [7,10]
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
@@ -282,15 +282,13 @@ model_evaluation:
     ]
   col_y: ['labeling_multi']
   lags: [1,2]
-  version: 1
-  num_splits: 9
+  num_splits: 17
   evals_strategy: False
 
 
 model_registration:
-  data_path: 'data/interim'
+  # data_path: 'data/interim'
   models_path: 'data/models'
-  timeframe: '5m'
   index_base: 5
   indexes_higher: [7,10]
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
@@ -412,3 +410,19 @@ model_registration:
   col_y: ['labeling_multi']
   lags: [1,2]
   version: 1
+  model_params_name: 'model_params_{timeframe}_v{version}.json'
+
+
+model_analysis:
+  target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor']
+  analysis_path: 'data/models/analysis'
+
+
+
+
+data_ingestion_trade:
+  table_name: 'DUKASCOPY_{ticker}_OHLC_{timeframe}'
+  ticker: 'DAX40'
+
+model_inference_trade:
+  file_name: 'questdb_static_features_{timeframe}.csv'

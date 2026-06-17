@@ -140,7 +140,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
     # X_columns.append('log_ret_ha_long_pca2')
 # X_columns = [x for x in X_columns if x not in cols]
 
-    if parameters['pca']:
+    if parameters['pca_ichimoku']:
         print('ichimoku_short_pca')
         cols = [x for x in X_columns if (x.startswith("tenkan_sen") or x.startswith("kijun_sen")) and not(x.endswith("1h"))]
         pca_res = calc_kernel_pca(ml_data[index_b], dates[1:], 10, cols, ['ichimoku_short_pca1','ichimoku_short_pca2'])
@@ -156,7 +156,17 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
         X_columns.append('ichimoku_long_pca1')
         X_columns.append('ichimoku_long_pca2')
     #    X_columns = [x for x in X_columns if x not in cols]
+        cols=[
+            'tenkan_sen','tenkan_sen_lag_1','tenkan_sen_lag_2',
+            'tenkan_sen_15m','tenkan_sen_lag_1_15m','tenkan_sen_lag_2_15m',
+            'tenkan_sen_1h','tenkan_sen_lag_1_1h','tenkan_sen_lag_2_1h',
+            'kijun_sen','kijun_sen_lag_1','kijun_sen_lag_2',
+            'kijun_sen_15m','kijun_sen_lag_1_15m','kijun_sen_lag_2_15m',
+            'kijun_sen_1h','kijun_sen_lag_1_1h','kijun_sen_lag_2_1h',
+        ]
+        X_columns = [x for x in X_columns if x not in cols]
 
+    if parameters['pca_kama']:
         print('kama_short_pca')
         cols = [x for x in X_columns if (x.startswith("kama_trend_slow_diff") or x.startswith("kama_trend_fast_diff")) and not (x.endswith("1h"))]
         pca_res = calc_kernel_pca(ml_data[index_b], dates[1:], 10, cols, ['kama_short_pca1','kama_short_pca2'])
@@ -197,13 +207,6 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
             'kama_trend_fast_diff_lag_2','kama_trend_fast_diff_lag_2_15m','kama_trend_fast_diff_lag_2_1h',
             'kama_trend_slow_diff2_lag_2','kama_trend_slow_diff2_lag_2_15m','kama_trend_slow_diff2_lag_2_1h',
             'kama_trend_fast_diff2_lag_2','kama_trend_fast_diff2_lag_2_15m','kama_trend_fast_diff2_lag_2_1h',
-
-            'tenkan_sen','tenkan_sen_lag_1','tenkan_sen_lag_2',
-            'tenkan_sen_15m','tenkan_sen_lag_1_15m','tenkan_sen_lag_2_15m',
-            'tenkan_sen_1h','tenkan_sen_lag_1_1h','tenkan_sen_lag_2_1h',
-            'kijun_sen','kijun_sen_lag_1','kijun_sen_lag_2',
-            'kijun_sen_15m','kijun_sen_lag_1_15m','kijun_sen_lag_2_15m',
-            'kijun_sen_1h','kijun_sen_lag_1_1h','kijun_sen_lag_2_1h',
         ]
         X_columns = [x for x in X_columns if x not in cols]
 

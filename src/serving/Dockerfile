@@ -7,15 +7,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 COPY setup.py .
-COPY src/ ./src/
+COPY . ./src/serving/
 
 RUN pip install --upgrade pip && \
-    pip install -r src/serving/requirements.txt && \
-    pip install -e .
+    pip install -r src/serving/requirements.txt
+    # pip install -e .
 
-COPY src/serving/.env ./src/serving/.env
+COPY .env ./src/serving/.env
 
-EXPOSE 8000
+# EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')" || exit 1

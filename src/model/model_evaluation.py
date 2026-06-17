@@ -1,3 +1,4 @@
+import dvc.api
 import numpy as np
 import pandas as pd
 import logging
@@ -12,17 +13,11 @@ from mlflow.tracking import MlflowClient
 
 from src.backtesting.optimization import objective
 from src.data_utils.utils import load_params, get_dates
+from src.model.mlflow_utils import find_latest_experiment, load_model_params_from_experiment, save_model_params
 from src.model.model_building import load_data
+from dotenv import load_dotenv
 
-os.environ["AWS_ACCESS_KEY_ID"] = "minio"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "minio123"
-os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://192.168.10.250:9900"
-
-MLFLOW_TRACKING_URI = "http://localhost:5000/"
-BUILDING_EXPERIMENT_TAGS = {
-    "project_name": "xgb-dax-pipeline",
-    "stage": "building",
-}
+load_dotenv()
 
 # logging configuration
 logger = logging.getLogger('model_evaluation')
@@ -67,72 +62,6 @@ logger.addHandler(file_handler)
 #         raise
 
 
-def find_latest_building_experiment(client: MlflowClient):
-    """Find the most recent MLflow experiment tagged for the building stage."""
-    filter_string = " AND ".join(
-        f"tags.{key} = '{value}'" for key, value in BUILDING_EXPERIMENT_TAGS.items()
-    )
-    experiments = client.search_experiments(filter_string=filter_string)
-    if not experiments:
-        raise ValueError(
-            f"No MLflow experiments found with tags: {BUILDING_EXPERIMENT_TAGS}"
-        )
-    return max(experiments, key=lambda exp: exp.last_update_time or exp.creation_time)
-
-
-def load_model_params_from_building_experiment(client: MlflowClient) -> dict:
-    """Load model_params artifact from the best run of the latest building experiment."""
-    experiment = find_latest_building_experiment(client)
-    best_run_name = experiment.tags.get("best_run_name")
-    if not best_run_name:
-        raise ValueError(
-            f"Experiment '{experiment.name}' (id={experiment.experiment_id}) "
-            "is missing the 'best_run_name' tag"
-        )
-
-    print(
-        f"Using experiment '{experiment.name}' (id={experiment.experiment_id}), "
-        f"best_run_name='{best_run_name}'"
-    )
-
-    runs = mlflow.search_runs(
-        experiment_ids=[experiment.experiment_id],
-        filter_string=f"run_name = '{best_run_name}'",
-    )
-    if runs.empty:
-        raise ValueError(
-            f"No run named '{best_run_name}' found in experiment "
-            f"'{experiment.name}' (id={experiment.experiment_id})"
-        )
-
-    run_id = runs.iloc[0]["run_id"]
-    artifact_dir = mlflow.artifacts.download_artifacts(
-        run_id=run_id,
-        artifact_path="model_params",
-    )
-
-    json_files = [
-        os.path.join(artifact_dir, filename)
-        for filename in os.listdir(artifact_dir)
-        if filename.endswith(".json")
-    ]
-    if not json_files:
-        raise ValueError(
-            f"No JSON model_params artifact found for run '{best_run_name}' "
-            f"(run_id={run_id})"
-        )
-
-    with open(json_files[0], "r") as file:
-        model_params = json.load(file)
-
-    logger.debug(
-        "Model params loaded from MLflow run '%s' (run_id=%s)",
-        best_run_name,
-        run_id,
-    )
-    return model_params
-
-
 # def save_model_info(run_id: str, model_path: str, file_path: str) -> None:
 #     """Save the model run ID and path to a JSON file."""
 #     try:
@@ -152,14 +81,11 @@ def load_model_params_from_building_experiment(client: MlflowClient) -> dict:
 
 def main():
 
-    # Get root directory and resolve the path for params.yaml
-    root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
-
     # Load parameters from the root directory
-    params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
+    params = dvc.api.params_show('params.yaml')
 
     # Load the preprocessed data from the interim directory
-    data = load_data(data_path=params['model_evaluation']['data_path'], params=params)
+    data = load_data(data_path=params['model_building']['data_path'], params=params)
     
     cutoff_date = date(2025,1,2)
     for d in data:
@@ -167,12 +93,12 @@ def main():
     unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
     print(mondays_indexes)
 
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
-    model_params = load_model_params_from_building_experiment(client)
+    model_params = load_model_params_from_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')), logger=logger)
     print(f"Loaded model params: {model_params}")
 
-    experiment = find_latest_building_experiment(client)
+    experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
     experiment_id = experiment.experiment_id
     optimisation_score = objective(None, data, params['model_evaluation'], cutoff_date, unique_dates, mondays_indexes, experiment_id, model_params_override=model_params)
     print(f"Optimisation score: {optimisation_score}")
@@ -191,8 +117,14 @@ def main():
     # print("Setting tags for experiment: ", tags)
     # mlflow.set_experiment_tags(tags)
 
+    # Save the trained model in the root directory
+    # print("Saving model parameters to json...")
+    model_params_path = os.path.join(params['model_building']['models_path'], f"model_params_evaluation_{run_id}.json")
+    save_model_params(model_params=model_params, file_path=model_params_path, logger=logger)
+
     with mlflow.start_run(run_id=run_id) as run:
         mlflow.log_metric('optimisation_score', optimisation_score)
+        mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
 
 
 if __name__ == '__main__':

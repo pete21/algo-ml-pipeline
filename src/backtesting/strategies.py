@@ -47,7 +47,9 @@ import pandas as pd
 # }
 
 
-def do_backtest_Strategy2(X_train, X_test, y_train, y_test, data_target, params, weighting):
+######################################################## DAYTRADING STRATEGY ########################################################
+
+def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target, params, weighting):
     rand_int = randint(1000000, 2000000)
     params_gpu = {
         'num_class': 3, 'device': 'gpu',
@@ -117,10 +119,10 @@ def do_backtest_Strategy2(X_train, X_test, y_train, y_test, data_target, params,
         finalize_trades=True)
     stats = bt.run()
 
-    return y_series, stats, model_gpu
+    return y_series, stats #, model_gpu
 
 
-# def do_backtest_Strategy2(X_train, X_test, y_train, y_test, data_target, params, weighting):
+# def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target, params, weighting):
 #     rand_int = randint(1000000, 2000000)
 #     model_xgb = XGBClassifier(num_class=3, device='gpu',
 #                     learning_rate=params['learning_rate'],
@@ -206,10 +208,10 @@ class Strategy2_opt_daytrading(Strategy):
 
 
 
-######################################################## EVALUATION STRATEGY ########################################################
+######################################################## EVALS STRATEGY ########################################################
 
 
-def do_backtest_Strategy2_evaluation(X_train, X_test, y_train, y_test, data_target, params, weighting):
+def do_backtest_Strategy2_evals(X_train, X_test, y_train, y_test, data_target, params, weighting):
     rand_int = randint(1000000, 2000000)
     params_gpu = {
         'num_class': 3, 'device': 'gpu',
@@ -267,7 +269,7 @@ def do_backtest_Strategy2_evaluation(X_train, X_test, y_train, y_test, data_targ
     # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
 
     bt = Backtest(data_target,
-        Strategy2_opt_evaluation,
+        Strategy2_opt_evals,
         cash=100000,
         spread=0,
         commission=0.0001,
@@ -278,11 +280,11 @@ def do_backtest_Strategy2_evaluation(X_train, X_test, y_train, y_test, data_targ
         finalize_trades=True)
     stats = bt.run()
 
-    return y_series, stats, model_gpu
+    return y_series, stats #, model_gpu
 
 
 
-class Strategy2_opt_evaluation(Strategy):
+class Strategy2_opt_evals(Strategy):
 
     def init(self):
         # In init() and in next() it is important to call the
@@ -309,6 +311,7 @@ class Strategy2_opt_evaluation(Strategy):
             # if not self.position:
 #                self.buy(size=math.floor(100000/self.data.Close[-1]), limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1])*self.data.Close[-1], tag=None)
             self.buy(size=1, limit=None, stop=None, sl=self.data.Close[-1] - self.data.sl[-1], tp=self.data.Close[-1] + self.data.tp[-1], tag=None)
+            return
 
         if self.data.y_pred[-1]<=-0.5:
             # if self.position.is_long:
@@ -395,7 +398,7 @@ def do_backtest_Strategy2_training(X_train, y_train, params):
 #             elif trade.is_short:
 #                 trade.sl = min(trade.sl or np.inf, self.data.Low[-1] + self.__sl_amount)
 
-# class Strategy2_opt_evaluation(TrailingStrategy):
+# class Strategy2_opt_evals(TrailingStrategy):
 
 #     def init(self, sl_amount: float = 100, tp_amount: float = 150):
 #         # In init() and in next() it is important to call the

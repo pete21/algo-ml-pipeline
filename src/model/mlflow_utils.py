@@ -133,3 +133,34 @@ def save_model_params(model_params: dict, file_path: str, logger: logging.Logger
         if logger:
             logger.error('Error occurred while saving the model parameters: %s', e)
         raise
+
+def find_model_versions(client: MlflowClient, model_name: str) -> list[int]:
+    """Find the model versions for a given model name."""
+    model_versions = client.search_model_versions(f"name='{model_name}'")
+    return [int(version.version) for version in model_versions]
+
+def find_latest_model_version(client: MlflowClient, model_name: str) -> int:
+    """Find the latest model version for a given model name."""
+    model_versions = find_model_versions(client, model_name)
+    max_version = max(model_versions)
+    print(f"Model version: {max_version}")
+    # print(f"Model version creation time: {max_version.creation_timestamp}")
+    # print(f"Model version description: {max_version.description}")
+    # print(f"Model version source: {max_version.source}")
+    # print(f"Model version status: {max_version.status}")
+    # print(f"Model version run_id: {max_version.run_id}")
+    # print(f"Model version tags: {max_version.tags}")
+    # print(f"Model version aliases: {max_version.aliases}")
+    return max_version
+
+def set_alias_to_model_version(client: MlflowClient, model_name: str, version: int, alias: str, logger: logging.Logger = None) -> None:
+    """Set an alias to a model version."""
+    try:
+        if logger:
+            logger.info(f"Setting alias {alias} to model version {version} for model {model_name}")
+        else:
+            print(f"Setting alias {alias} to model version {version} for model {model_name}")
+        client.set_registered_model_alias(name=model_name, version=str(version), alias=alias)
+    except Exception as e:
+        logger.error(f"Error setting alias to model version: {e}")
+        raise

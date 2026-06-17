@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TARGET_METRICS = ('optimisation_score', 'total_profit')
+TARGET_METRICS_DEFAULT = ('optimisation_score', 'total_profit')
 
 # logging configuration
 logger = logging.getLogger('model_analysis')
@@ -56,7 +56,7 @@ def _numeric_model_param_columns(
 def compute_param_metric_correlations(
     trial_runs_df: pd.DataFrame,
     model_param_names: list[str],
-    target_metrics: tuple[str, ...] = TARGET_METRICS,
+    target_metrics: tuple[str, ...] = TARGET_METRICS_DEFAULT,
 ) -> pd.DataFrame:
     """Correlate numeric model parameters with the requested trial metrics."""
     # numeric_params = _numeric_model_param_columns(trial_runs_df, model_param_names)
@@ -200,7 +200,7 @@ def main():
     )
     print(correlations_df.head())
 
-    analysis_dir = os.path.join(root_dir, "data", "models", "analysis")
+    analysis_dir = os.path.join(params['model_analysis']['analysis_path'])
     correlations_path = os.path.join(analysis_dir, "param_metric_correlations.csv")
     os.makedirs(analysis_dir, exist_ok=True)
     correlations_df.to_csv(correlations_path, index=False)

@@ -29,23 +29,18 @@ GET /health Health check
 
 - `REGISTERED_MODEL_NAME` (default: `{MODEL_NAME}_20260525`)
 - `MODEL_VERSION_ALIAS` (default: `Staging`)
-- `MODEL_SERVE_HOST` / `MODEL_SERVE_PORT` (default: `0.0.0.0:8000`)
+- `MODEL_SERVE_PORT` (default: `8000`)
 
 ### Docker
 
-Build from the repository root:
+Build & Run with the bundled `src/serving/.env`:
 
 ```bash
-docker build -f src/serving/Dockerfile -t algo-ml-model-serving .
-```
-
-Run with the bundled `src/serving/.env`:
-
-```bash
-cp src/serving/.env.example src/serving/.env
-docker build -f src/serving/Dockerfile -t algo-ml-model-serving .
+cd src/serving/
+cp .env.example .env
+docker build -f ./Dockerfile -t algo-ml-model-serving .
 docker run --rm \
-  --env-file src/serving/.env \
+  --env-file ./.env \
   -e MLFLOW_TRACKING_URI=http://host.docker.internal:5000/ \
   --add-host=host.docker.internal:host-gateway \
   -p 8000:8000 \
@@ -55,12 +50,12 @@ docker run --rm \
 Or use docker compose from `src/serving`:
 
 ```bash
-cd src/serving
+cd src/serving/
 docker compose up --build
 ```
 
-Swagger UI: `http://localhost:8000/docs`
+Swagger UI: `http://localhost:{MODEL_SERVE_PORT}/docs`
 
 When running in Docker, set `MLFLOW_TRACKING_URI` to a host reachable from the container
-(for example `http://host.docker.internal:5000/` instead of `http://localhost:5000/`).
+(for example `http://host.docker.internal:5000/` or `http://mlflow:5000/` instead of `http://localhost:5000/`).
 

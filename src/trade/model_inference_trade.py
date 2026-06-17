@@ -1,4 +1,3 @@
-
 import logging
 import json
 import os
@@ -6,8 +5,8 @@ import urllib.error
 import urllib.request
 import dvc.api
 import pandas as pd
-from src.data_utils.utils import getXy, load_params, get_dates
-from src.backtesting.optimization import objective
+import numpy as np
+from src.data_utils.utils import getXy
 from datetime import date, datetime
 from dotenv import load_dotenv
 
@@ -18,38 +17,21 @@ PREDICT_URL = os.getenv("MODEL_PREDICT_URL", "http://localhost:8100/predict")
 MODEL_PARAMS_URL = os.getenv("MODEL_PARAMS_URL", "http://localhost:8100/model/params")
 
 
-# logging configuration
-logger = logging.getLogger('model_inference_trade')
-logger.setLevel('DEBUG')
 
-console_handler = logging.StreamHandler()
-console_handler.setLevel('DEBUG')
-
-file_handler = logging.FileHandler('model_inference_trade_errors.log')
-file_handler.setLevel('ERROR')
-
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-file_handler.setFormatter(formatter)
-
-logger.addHandler(console_handler)
-logger.addHandler(file_handler)
-
-
-def load_data(data_path: str, params: dict) -> dict:
+def load_data(data_path: str, params: dict, logger: logging.Logger) -> dict:
     """Load data from a CSV file."""
     try:
         data = {}
-        print(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][params['model_building']['index_base']])))
-        print("Loading data for index base: ", params['model_building']['index_base'])
-        data[params['model_building']['index_base']] = pd.read_csv(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][params['model_building']['index_base']])), parse_dates=True, index_col='date')
+        filename = os.path.join(data_path, params['model_inference_trade']['file_name'].format(timeframe=params['model_building']['timeframes'][params['model_building']['index_base']]))
+        print("Loading data from: ", filename)
+        data[params['model_building']['index_base']] = pd.read_csv(filename, parse_dates=True, index_col='date')
         # data[params['data_preprocessing']['index_base']]["high_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["high_time"])
         # data[params['data_preprocessing']['index_base']]["low_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["low_time"])
         
         for i in params['model_building']['indexes_higher']:
-            print(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][i])))
-            print("Loading data for index: ", i)
-            data[i] = pd.read_csv(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][i])), parse_dates=True, index_col='date')
+            filename = os.path.join(data_path, params['model_inference_trade']['file_name'].format(timeframe=params['model_building']['timeframes'][i]))
+            print("Loading data from: ", filename)
+            data[i] = pd.read_csv(filename, parse_dates=True, index_col='date')
         
         data[params['model_building']['index_base']]["date_merge"] = data[params['model_building']['index_base']].index
         for i in params['model_building']['indexes_higher']:
@@ -65,8 +47,7 @@ def load_data(data_path: str, params: dict) -> dict:
         logger.error('Unexpected error occurred while loading the data: %s', e)
         raise
 
-
-def request_predictions(X: pd.DataFrame, url: str = PREDICT_URL, n_rows: int = 10) -> dict:
+def request_predictions(X: pd.DataFrame, url: str, n_rows: int, logger: logging.Logger) -> dict:
     """POST the last n rows of X to the model serving /predict endpoint."""
     sample = X.tail(n_rows)
     payload = {
@@ -84,56 +65,101 @@ def request_predictions(X: pd.DataFrame, url: str = PREDICT_URL, n_rows: int = 1
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8")
+        logger.error('Prediction request failed with status %s: %s', exc.code, error_body)
         raise RuntimeError(
             f"Prediction request failed with status {exc.code}: {error_body}"
         ) from exc
 
 
-def fetch_model_params(url: str = MODEL_PARAMS_URL) -> dict:
+def fetch_model_params(url: str, logger: logging.Logger) -> dict:
     """Fetch model_params from the model serving endpoint."""
     request = urllib.request.Request(url, method="GET")
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=10) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8")
+        logger.error('Model params request failed with status %s: %s', exc.code, error_body)
         raise RuntimeError(
             f"Model params request failed with status {exc.code}: {error_body}"
         ) from exc
 
 
-def main():
+def main(logger: logging.Logger):
     print("Starting model inference process...")
+    print(f"Start time: {datetime.now()}")
     try:
         # Get root directory and resolve the path for params.yaml
-        root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
+        # root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
 
         # Load parameters from the root directory
         params = dvc.api.params_show('params.yaml')
         # model_params = load_json_params(os.path.join(root_dir, 'model_params.json'), logger=logger)
 
         # Load the preprocessed data from the interim directory
-        data = load_data(data_path=params['model_building']['data_path'], params=params)
+        data = load_data(data_path=params['model_building']['data_path'], params=params, logger=logger)
+        data[params['model_building']['index_base']].loc[:,"target"] = 0
 
-        model_params = fetch_model_params()
+        model_params = fetch_model_params(url=MODEL_PARAMS_URL, logger=logger)
         print(f"Loaded model params: {model_params}")
 
-        
-        X, y, columns = getXy(data, params['model_building']['index_base'], params['model_building']['indexes_higher'], model_params, params['model_building']['timeframe_scalers'], params['model_building']['list_X'], params['model_building']['col_y'], date(2026,1,1), params['model_building']['lags'], col_open="Open", col_high="High", col_low="Low", col_close="Close")
-        print(X.head())
-        print(y.head())
-        print(columns)
+        p={}
+        for i in params['model_building']['indexes_higher']:
+            p[i] = model_params
 
-        predictions = request_predictions(X, n_rows=10)
+        X, _, columns = getXy(data,
+        params['model_building']['index_base'],
+        params['model_building']['indexes_higher'],
+        model_params,
+        p,
+        params['model_building']['timeframes'],
+        params['model_building']['timeframe_scalers'],
+        params['model_building']['list_X'],
+        'target',
+        date.today()-pd.Timedelta(90, "d"),
+        params['model_building']['lags'],
+        col_open="Open", col_high="High", col_low="Low", col_close="Close"
+        )
+        print(X.head())
+        # print(y.head())
+        # print(columns)
+        num_rows = 10
+        predictions = request_predictions(X, url=PREDICT_URL, n_rows=num_rows, logger=logger)
         print(f"Received {len(predictions.get('predictions', []))} predictions")
         print(predictions)
+        # for i in predictions['predictions']:
+            # print(i)
+            # average = np.multiply(i, [-1,0,1])
+            # print(np.sum(average))
 
+        y_pred_expected = np.matmul(predictions['predictions'], np.array([[-1],[0],[1]]))
+        # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
+        # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=params['pred_avg_period'], min_periods=1).mean()
+        y_series = pd.Series(y_pred_expected.flatten(), index=X.index[-num_rows:], name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
+        print(y_series)
     
     except Exception as e:
         logger.error('Failed to complete the feature engineering and model building process: %s', e)
         print(f"Error: {e}")
     print("Model building process completed successfully.")
-
+    print(f"End time: {datetime.now()}")
 
 if __name__ == '__main__':
-    main()
+
+    # logging configuration
+    logger = logging.getLogger('trade')
+    logger.setLevel('DEBUG')
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel('DEBUG')
+
+    file_handler = logging.FileHandler('trade_errors.log')
+    file_handler.setLevel('ERROR')
+
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+    main(logger)

@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import logging
 from datetime import date
-from src.data_utils.utils import get_dates, load_params
+from src.data_utils.utils import load_params
 from src.data_utils.wavelet import wavelet_denoising2
 
 
@@ -109,7 +109,7 @@ def main():
         # Preprocess the data
         data = preprocess_data(src_data, params)
 
-        unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['data_ingestion']['index_base'])
+        # unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['data_ingestion']['index_base'])
         
         # Save the data
         save_data(data, params, params['data_ingestion']['data_path_dest'])

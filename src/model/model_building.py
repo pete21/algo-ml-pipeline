@@ -7,6 +7,9 @@ import json
 from src.data_utils.utils import load_params, get_dates
 from src.backtesting.optimization import objective
 from datetime import date, datetime
+from dotenv import load_dotenv
+
+from src.model.mlflow_utils import create_mlflow_experiment, save_model_params
 
 # from optuna.visualization import plot_param_importances, plot_contour, plot_slice
 # from optuna.visualization import plot_contour
@@ -20,12 +23,7 @@ from datetime import date, datetime
 # from optuna.visualization import plot_timeline
 # from optuna.importance import get_param_importances
 
-# Set credentials matching your .env file
-os.environ["AWS_ACCESS_KEY_ID"] = "minio"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "minio123"
-
-# Point to your remote MinIO instance (Notice the remote IP and port 9900)
-os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://192.168.10.250:9900"
+load_dotenv()
 
 
 # logging configuration
@@ -127,18 +125,6 @@ def load_data(data_path: str, params: dict) -> dict:
 #         raise
 
 
-def save_model(model_params: dict, file_path: str) -> None:
-    """Save the trained model parameters to a file."""
-    try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-        with open(file_path, 'w') as file:
-            json.dump(model_params, file)
-        logger.debug('Model parameters saved to %s', file_path)
-    except Exception as e:
-        logger.error('Error occurred while saving the model parameters: %s', e)
-        raise
-
 
 # def get_root_directory() -> str:
 #     """Get the root directory (two levels up from this script's location)."""
@@ -167,35 +153,6 @@ def save_model(model_params: dict, file_path: str) -> None:
 #       return mlflow.create_experiment(experiment_name)
 
 
-def create_mlflow_experiment(experiment_name: str, mlflow_tracking_uri: str, tags: dict)->str:
-    """
-    Function to create an MLFlow experiment with a defined experiment name.
-    """
-
-    # Set MLFLow tracking URI
-    print("Setting MLFlow tracking URI...")
-    mlflow.set_tracking_uri(mlflow_tracking_uri)
-    logging.info("MLFlow Tracking URI URI set as: %s", mlflow_tracking_uri)
-
-    logging.info("Creating experiment...")
-    print("Creating experiment...")
-
-    try:
-        # Create the experiment. It returns the ID of the created experiment.
-        experiment_id = mlflow.create_experiment(name=experiment_name, tags=tags)
-        print(f"Experiment '{experiment_name}' created with ID: {experiment_id}")
-    except mlflow.exceptions.MlflowException as e:
-        # Handle cases where the experiment might already exist
-        print(f"Experiment '{experiment_name}' already exists.")
-        # Optionally, get the ID of the existing experiment
-        experiment = mlflow.get_experiment_by_name(experiment_name)
-        experiment_id = experiment.experiment_id
-        print(f"Using existing experiment ID: {experiment_id}")
-        return experiment_id
-    except Exception as e:
-        print(f"Error creating experiment: {e}")
-        raise
-    return experiment_id
 
 
 def main():
@@ -217,10 +174,14 @@ def main():
         unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
         print(mondays_indexes)
 
-        experiment_name = f'xgb-dax-pipeline-runs-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+        experiment_name = f'xgb-dax-pipeline-v{params["model_building"]["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+        if params['model_building']['evals_strategy']:
+            experiment_name += '-evals'
+        else:
+            experiment_name += '-trading'
         print(f"Experiment name: {experiment_name}")
 
-        experiment_id = create_mlflow_experiment(experiment_name=experiment_name, mlflow_tracking_uri="http://localhost:5000/", tags={})
+        experiment_id = create_mlflow_experiment(experiment_name=experiment_name, mlflow_tracking_uri=os.getenv('MLFLOW_TRACKING_URI'), tags={}, logger=logger)
         mlflow.set_experiment(experiment_id=experiment_id)
         # experiment = mlflow.get_experiment(experiment_id=experiment_id)
 
@@ -234,7 +195,7 @@ def main():
         # Save the trained model in the root directory
         print("Saving model parameters to json...")
         model_params_path = os.path.join(params['model_building']['models_path'], params['model_building']['model_params_name'].format(timeframe=params['model_building']['timeframe'], version=params['model_building']['version']))
-        save_model(study.best_params, model_params_path)
+        save_model_params(model_params=study.best_params, file_path=model_params_path, logger=logger)
 
 
         print("Saving study trials to csv...")

@@ -26,6 +26,11 @@ MLFLOW_TYPE_MAP = {
     "datetime": str,
 }
 
+# mlflow_tracking_uri: str = os.getenv("MLFLOW_TRACKING_URI")
+# if mlflow_tracking_uri is None:
+#     raise ValueError("MLFLOW_TRACKING_URI is not set")
+
+mlflow_tracking_uri = ""
 
 def create_pydantic_model_from_signature(
     schema: mlflow.types.schema.Schema,
@@ -62,6 +67,7 @@ def load_registered_model(
     model_info = get_model_info(model_uri)
     model = mlflow.xgboost.load_model(model_uri)
 
+    model_params={}
     artifact_dir = mlflow.artifacts.download_artifacts(
         run_id=model_version_info.run_id,
         artifact_path="model_params",
@@ -94,6 +100,7 @@ def load_registered_model(
 
 
 def build_serving_app(
+    tracking_uri: str,
     model: Any,
     model_info: Any,
     model_uri: str,
@@ -102,6 +109,9 @@ def build_serving_app(
     model_params: dict,
     example_data: Optional[dict] = None,
 ) -> FastAPI:
+
+    mlflow_tracking_uri = tracking_uri
+
     """Create a FastAPI app with Swagger docs derived from the MLflow input signature."""
     if model_info.signature is None or model_info.signature.inputs is None:
         raise ValueError("Model signature inputs are required for serving.")

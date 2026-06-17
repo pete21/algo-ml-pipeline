@@ -8,3 +8,4 @@ scikit-learn
 scipy
 uvicorn[standard]
 xgboost
+lightgbm
