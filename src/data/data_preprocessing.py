@@ -24,15 +24,15 @@ logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
 
-def load_data(data_path: str, params: dict) -> dict:
+def load_data(params: dict) -> dict:
     """Load the data from the data/raw directory."""
     try:
         data = {}
-        data[params['data_preprocessing']['index_base']] = pd.read_csv(os.path.join(data_path, params['data_preprocessing']['file_name'].format(timeframe=params['data_preprocessing']['timeframes'][params['data_preprocessing']['index_base']])), parse_dates=True, index_col='date')
+        data[params['data_preprocessing']['index_base']] = pd.read_csv(os.path.join(params['data_preprocessing']['data_path'], params['data_preprocessing']['file_name'].format(timeframe=params['data_preprocessing']['timeframes'][params['data_preprocessing']['index_base']])), parse_dates=True, index_col='date')
         data[params['data_preprocessing']['index_base']]["high_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["high_time"])
         data[params['data_preprocessing']['index_base']]["low_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["low_time"])
         for i in params['data_preprocessing']['indexes_higher']:
-            data[i] = pd.read_csv(os.path.join(data_path, params['data_preprocessing']['file_name'].format(timeframe=params['data_preprocessing']['timeframes'][i])), parse_dates=True, index_col='date')
+            data[i] = pd.read_csv(os.path.join(params['data_preprocessing']['data_path'], params['data_preprocessing']['file_name'].format(timeframe=params['data_preprocessing']['timeframes'][i])), parse_dates=True, index_col='date')
             data[i]["date_merge"] = pd.to_datetime(data[i]["date_merge"])
         return data
     except Exception as e:
@@ -44,7 +44,7 @@ def preprocess_data(data: dict, params: dict) -> dict:
     """Preprocess the data by adding static features"""
     try:
         
-        unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['data_preprocessing']['index_base'])
+        unique_dates, unique_weekdates = get_dates(data, params['data_preprocessing']['index_base'])
         
         for i in params['data_preprocessing']['indexes_higher']:
             data[i] = static_features(data[i], unique_weekdates, params['data_preprocessing']['timeframe_scalers'][i], high_col="High", low_col="Low", open_col="Open", close_col="Close")
@@ -66,24 +66,24 @@ def preprocess_data(data: dict, params: dict) -> dict:
     # for i in params['data_preprocessing']['indexes_higher']:
     #     data[i] = calculate_features(data[i], p[i], params['data_preprocessing']['timeframe_scalers'][i], col_close="Close", col_high="High", col_low="Low")
 
-    return data
+    # return data
 
 
-def save_data(data: dict, params: dict, data_path: str) -> None:
+def save_data(data: dict, params: dict) -> None:
     """Save the processed dataset."""
     try:     
-        os.makedirs(data_path, exist_ok=True)  # Ensure the directory is created
-        logger.debug(f"Directory {data_path} created or already exists")
+        os.makedirs(params['data_preprocessing']['data_path_dest'], exist_ok=True)  # Ensure the directory is created
+        logger.debug(f"Directory {params['data_preprocessing']['data_path_dest']} created or already exists")
 
         for i in params['data_preprocessing']['indexes_higher']:
             data[i].drop(columns=['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos'], inplace=True)
-            data[i].to_csv(os.path.join(data_path, f'data_static_features_{params['data_preprocessing']['timeframes'][i]}.csv'), index=True)
+            data[i].to_csv(os.path.join(params['data_preprocessing']['data_path_dest'], f'data_static_features_{params['data_preprocessing']['timeframes'][i]}.csv'), index=True)
 
-        data[params['data_preprocessing']['index_base']].to_csv(os.path.join(data_path, f"data_static_features_{params['data_preprocessing']['timeframes'][params['data_preprocessing']['index_base']]}.csv"), index=True)
-        data[params['data_preprocessing']['index_base']].isnull().sum().to_csv(os.path.join(data_path, 'nulls.csv'))
-        data[params['data_preprocessing']['index_base']].isin([np.inf, -np.inf]).sum().to_csv(os.path.join(data_path, 'inf.csv'))
+        data[params['data_preprocessing']['index_base']].to_csv(os.path.join(params['data_preprocessing']['data_path_dest'], f"data_static_features_{params['data_preprocessing']['timeframes'][params['data_preprocessing']['index_base']]}.csv"), index=True)
+        data[params['data_preprocessing']['index_base']].isnull().sum().to_csv(os.path.join(params['data_preprocessing']['data_path_dest'], 'nulls.csv'))
+        data[params['data_preprocessing']['index_base']].isin([np.inf, -np.inf]).sum().to_csv(os.path.join(params['data_preprocessing']['data_path_dest'], 'inf.csv'))
 
-        logger.debug(f"Processed data saved to {data_path}")
+        logger.debug(f"Processed data saved to {params['data_preprocessing']['data_path_dest']}")
     except Exception as e:
         logger.error(f"Error occurred while saving data: {e}")
         raise
@@ -95,14 +95,14 @@ def main():
         params = load_params(params_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../params.yaml'), logger=logger)
 
         # Fetch the data from data/raw
-        data = load_data(data_path=params['data_preprocessing']['data_path'], params=params)
+        data = load_data(params=params)
         logger.debug('Data loaded successfully')
 
         # Preprocess the data
         data = preprocess_data(data, params)
 
         # Save the processed data
-        save_data(data, params, data_path=params['data_preprocessing']['data_path_dest'])
+        save_data(data, params)
     except Exception as e:
         logger.error('Failed to complete the data preprocessing process: %s', e)
         print(f"Error: {e}")

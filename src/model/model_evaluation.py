@@ -90,8 +90,7 @@ def main():
     cutoff_date = date(2025,1,2)
     for d in data:
         data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
-    unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
-    print(mondays_indexes)
+    _, unique_weekdates = get_dates(data, params['model_building']['index_base'])
 
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
@@ -100,7 +99,7 @@ def main():
 
     experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
     experiment_id = experiment.experiment_id
-    optimisation_score = objective(None, data, params['model_evaluation'], cutoff_date, unique_dates, mondays_indexes, experiment_id, model_params_override=model_params)
+    optimisation_score = objective(None, data, params['model_evaluation'], cutoff_date, unique_weekdates, experiment_id, model_params_override=model_params)
     print(f"Optimisation score: {optimisation_score}")
 
 

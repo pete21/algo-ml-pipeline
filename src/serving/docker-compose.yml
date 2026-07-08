@@ -1,6 +1,7 @@
 services:
   model_serving:
     hostname: model_serving
+    container_name: model_serving
     build:
       context: .
       dockerfile: Dockerfile
@@ -15,9 +16,9 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
-      - mlflow_net
+      - marketbroker_net
 
 networks:
-    mlflow_net:
-        name: mlflow_network
+    marketbroker_net:
+        name: marketbroker_net-network
         external: true

@@ -1,7 +1,11 @@
 data_ingestion:
   data_path: 'data/src'
   data_path_dest: 'data/raw'
-  ticker: 'DAX40_USDT_USDT'
+  ticker: 'DAX40'
+  data_source: 'questdb'
+  table_name: 'DUKASCOPY_{ticker}_OHLC_{timeframe}'
+  start_date: '2021-07-01'
+  end_date: '2026-06-30'
   timeframe: '1m'
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
@@ -23,7 +27,7 @@ data_preprocessing:
   indexes_higher: [7,10]
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
-  file_name: 'data_ohlc_features_{timeframe}.csv'
+  file_name: 'data_ohlc_{timeframe}.csv'
 
 model_building:
   data_path: 'data/interim'
@@ -152,7 +156,7 @@ model_building:
   version: 1
   model_name: 'xgboost_model_with_pca_v1'
   model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 2
+  n_trials: 400
   num_splits: 17
   note: 'xgb-dax-pipeline with PCA'
   evals_strategy: False
@@ -422,7 +426,10 @@ model_analysis:
 
 data_ingestion_trade:
   table_name: 'DUKASCOPY_{ticker}_OHLC_{timeframe}'
+  tickstream_table_name: 'TICKSTREAM_{ticker}_OHLC_{timeframe}'
+  gaps_table_name: 'GAPS_{ticker}_OHLC_{timeframe}'
   ticker: 'DAX40'
+  start_date: '2026-05-01'
 
 model_inference_trade:
   file_name: 'questdb_static_features_{timeframe}.csv'

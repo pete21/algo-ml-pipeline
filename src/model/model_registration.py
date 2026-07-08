@@ -48,17 +48,21 @@ def main():
     cutoff_date = datetime.today().date() - pd.Timedelta(days=730)
     for d in data:
         data[d] = data[d].loc[data[d].index.date>=cutoff_date]
-    unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
-    print(mondays_indexes)
+    _, unique_weekdates = get_dates(data, params['model_building']['index_base'])
 
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
     model_params = load_model_params_from_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')), logger=logger)
     print(f"Loaded model params: {model_params}")
 
+    last_weekdate = [d for d in unique_weekdates if d.weekday()==model_params['weekday']][-1]
+    train_split_index = unique_weekdates.index(last_weekdate)
+    print(f"Train split index: {train_split_index}")
+    print(f"Train split date: {unique_weekdates[train_split_index]}")
+
     experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
     experiment_id = experiment.experiment_id
-    registered_model_name = train_register_model(data=data, params=params['model_registration'], unique_dates=unique_dates, train_split_index=mondays_indexes[-1], experiment_id=experiment_id, model_params=model_params)
+    registered_model_name = train_register_model(data=data, params=params['model_registration'], unique_weekdates=unique_weekdates, train_split_index=train_split_index, experiment_id=experiment_id, model_params=model_params)
     print(f"Registered model name: {registered_model_name}")
 
     client = mlflow.MlflowClient()

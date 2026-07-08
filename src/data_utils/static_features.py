@@ -5,7 +5,7 @@ import talib
 from src.data_utils.wavelet import wavelet_denoising_rolling
 import src.data_utils.features_engineering.math as math
 
-from datetime import datetime, date
+from datetime import datetime
 
 def sliding_elementwise_mult(values: np.ndarray, weights: np.ndarray, scaler: float) -> float:
     """Elementwise multiply window values by weights; return sum of products."""

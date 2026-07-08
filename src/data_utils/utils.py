@@ -43,17 +43,16 @@ def load_json_params(params_path: str, logger: logging.Logger) -> dict:
         logger.error('Unexpected error: %s', e)
         raise
 
-def get_dates(data: dict, index: int) -> tuple[list, list, list]:
+def get_dates(data: dict, index: int) -> tuple[list, list]:
     unique_dates = np.unique(data[index].index.date)
     unique_weekdates = []
     for d in unique_dates:
         if d.weekday()<5:
             unique_weekdates.append(d)
     print("unique_dates: ", len(unique_dates), "unique_weekdates: ", len(unique_weekdates))
-
-    mondays_indexes = [i for i, n in enumerate(unique_dates) if n.weekday() == 0]
-    num_mondays = sum(1 for i in unique_dates if i.weekday() == 0)
-    return unique_dates, unique_weekdates, mondays_indexes
+    print("Minimum date: ", unique_dates[0], "Maximum date: ", unique_dates[-1])
+    print("Minimum weekdate: ", unique_weekdates[0], "Maximum weekdate: ", unique_weekdates[-1])
+    return unique_dates, unique_weekdates
 
 
 def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, timeframes: list, scalers: dict, X_cols: list, y_col: str, cutoff_date: date, lags: list, col_open="Open", col_high="High", col_low="Low", col_close="Close") -> tuple[pd.DataFrame, pd.DataFrame, list]:
@@ -62,7 +61,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
     ml_data[index_b] = dynamic_features(data[index_b], parameters, scalers[index_b], col_close=col_close, col_high=col_high, col_low=col_low)
     ml_data[index_b] = ml_data[index_b][X_cols + [y_col] + [col_open, col_high, col_low, "date_merge", 'dow_sin', 'dow_cos', 'hour_sin', 'hour_cos']].loc[ml_data[index_b].index.date>=cutoff_date_2]
 
-    target = ml_data[index_b].loc[(ml_data[index_b].index.hour>=parameters['hour_range_start']) & (ml_data[index_b].index.hour<=parameters['hour_range_stop']), [y_col]]
+    # target = ml_data[index_b].loc[(ml_data[index_b].index.hour>=parameters['hour_range_start']) & (ml_data[index_b].index.hour<=parameters['hour_range_start']+10), [y_col]]
 
     lag_f = LagFeatures(variables = X_cols + [col_open, col_high, col_low], periods=lags, drop_na=True)
 
@@ -96,7 +95,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 
     ml_data[index_b].set_index('date_merge', drop=True, inplace=True)
     ml_data[index_b] = ml_data[index_b].loc[ml_data[index_b].index.date>=cutoff_date]
-    # ml_data[index_b].to_csv('ml_data_index_b.csv')
+    # ml_data[index_b].to_csv('ml_data_index_b.csv', index=True, header=True)
     # print(ml_data[index_b].columns.values)
 
 #    ml_data[index_b][ml_data[index_b].select_dtypes(np.float16).columns] = ml_data[index_b].select_dtypes(np.float16).astype(np.float32)
@@ -143,6 +142,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
     if parameters['pca_ichimoku']:
         print('ichimoku_short_pca')
         cols = [x for x in X_columns if (x.startswith("tenkan_sen") or x.startswith("kijun_sen")) and not(x.endswith("1h"))]
+        print('ichimoku_short_pca cols: ', cols)
         pca_res = calc_kernel_pca(ml_data[index_b], dates[1:], 10, cols, ['ichimoku_short_pca1','ichimoku_short_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
         X_columns.append('ichimoku_short_pca1')
@@ -151,6 +151,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 
         print('ichimoku_long_pca')
         cols = [x for x in X_columns if (x.startswith("tenkan_sen") or x.startswith("kijun_sen")) and (x.endswith("1h"))]
+        print('ichimoku_long_pca cols: ', cols)
         pca_res = calc_kernel_pca(ml_data[index_b], dates[1:], 10, cols, ['ichimoku_long_pca1','ichimoku_long_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
         X_columns.append('ichimoku_long_pca1')

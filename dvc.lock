@@ -1,29 +1,112 @@
 schema: '2.0'
 stages:
+  data_ingestion:
+    cmd: python src/data/data_ingestion.py
+    deps:
+    - path: src/data/data_ingestion.py
+      hash: md5
+      md5: e792c394778f30975b07e8c999492287
+      size: 7798
+    params:
+      params.yaml:
+        data_ingestion.data_path: data/src
+        data_ingestion.data_path_dest: data/raw
+        data_ingestion.data_source: questdb
+        data_ingestion.end_date: '2026-06-26'
+        data_ingestion.file_name: '{ticker}-{timeframe}-futures.parquet'
+        data_ingestion.high_time_col: High
+        data_ingestion.high_time_col_wavelet: Close_wavelet
+        data_ingestion.index_barrier: 1
+        data_ingestion.index_base: 5
+        data_ingestion.indexes:
+        - 1
+        - 5
+        - 7
+        - 10
+        data_ingestion.indexes_higher:
+        - 7
+        - 10
+        data_ingestion.low_time_col: Low
+        data_ingestion.low_time_col_wavelet: Close_wavelet
+        data_ingestion.start_date: '2023-04-03'
+        data_ingestion.table_name: DUKASCOPY_{ticker}_OHLC_{timeframe}
+        data_ingestion.ticker: DAX40
+        data_ingestion.timeframe: 1m
+        data_ingestion.timeframe_minutes:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 10
+        - 15
+        - 20
+        - 30
+        - 60
+        - 120
+        - 240
+        - 1440
+        data_ingestion.timeframe_scalers:
+        - 0.22
+        - 0.44
+        - 0.63
+        - 0.77
+        - 0.89
+        - 1
+        - 1.4
+        - 1.7
+        - 2
+        - 2.4
+        - 3.4
+        - 4.8
+        - 6.8
+        - 9.6
+        data_ingestion.timeframes:
+        - 10s
+        - 1m
+        - 2m
+        - 3m
+        - 4m
+        - 5m
+        - 10m
+        - 15m
+        - 20m
+        - 30m
+        - 1h
+        - 2h
+        - 4h
+        - 1d
+    outs:
+    - path: data/raw
+      hash: md5
+      md5: 99c5589a1570d2bdf57a2714827a05a6.dir
+      size: 32940233
+      nfiles: 3
   data_preprocessing:
     cmd: python src/data/data_preprocessing.py
     deps:
-    - path: data/raw/data_ohlc_features_15m.csv
+    - path: data/raw/data_ohlc_15m.csv
       hash: md5
-      md5: 675ad3edadaa02015af45eb37ebcd376
-      size: 6482169
-    - path: data/raw/data_ohlc_features_1h.csv
+      md5: e79cab467b5fcc72b37ee2f2114c4441
+      size: 5751711
+    - path: data/raw/data_ohlc_1h.csv
       hash: md5
-      md5: a030b6bd5694e8df05fe50de4b6989f5
-      size: 1670848
-    - path: data/raw/data_ohlc_features_5m.csv
+      md5: 9d56fb55c8511ce44458fe6fd9bbb9a1
+      size: 1482521
+    - path: data/raw/data_ohlc_5m.csv
       hash: md5
-      md5: 972f20dce356a9e89152e14c15e3f9db
-      size: 27086410
+      md5: 36961e70b951ff9ca061a54d4afdb608
+      size: 25706001
     - path: src/data/data_preprocessing.py
       hash: md5
-      md5: 94bbb76f75d8a5ce1a85fb7676b5fff8
-      size: 7070
+      md5: 4ff547e8426286e4f9e5ae91657816cc
+      size: 7235
     params:
       params.yaml:
         data_preprocessing.data_path: data/raw
         data_preprocessing.data_path_dest: data/interim
-        data_preprocessing.file_name: data_ohlc_features_{timeframe}.csv
+        data_preprocessing.file_name: data_ohlc_{timeframe}.csv
         data_preprocessing.index_base: 5
         data_preprocessing.indexes_higher:
         - 7
@@ -61,28 +144,28 @@ stages:
     outs:
     - path: data/interim
       hash: md5
-      md5: 180163256076997e9db91a83f4f0ec89.dir
-      size: 392298283
+      md5: c88cf2446bba90c012a76a2d2ecb7572.dir
+      size: 398384559
       nfiles: 5
   model_building:
     cmd: python src/model/model_building.py
     deps:
     - path: data/interim/data_static_features_15m.csv
       hash: md5
-      md5: 82f152a4bb359b1a2778b881fd5f1369
-      size: 86921787
+      md5: 2d9993f1b22f0ef21abd12ec7125562e
+      size: 88083318
     - path: data/interim/data_static_features_1h.csv
       hash: md5
-      md5: 459f6dec5938bb4f2c03ad3ae440fb65
-      size: 22212872
+      md5: a501228da2b42b1462918c642bb949d1
+      size: 22504927
     - path: data/interim/data_static_features_5m.csv
       hash: md5
-      md5: af8eb2a44ce2f95deaddecd5898b39e1
-      size: 283161545
+      md5: 82fb9ca7ca863c45faa09eed122775fa
+      size: 287794235
     - path: src/model/model_building.py
       hash: md5
-      md5: 3a682125c3f99278238cb57c18ac877f
-      size: 10961
+      md5: 227fdaf46acda2780133bdf6aebc2cc6
+      size: 10896
     params:
       params.yaml:
         model_building.col_y:
@@ -159,7 +242,7 @@ stages:
         model_building.model_params_name: 
           model_params_{timeframe}_v{version}.json
         model_building.models_path: data/models
-        model_building.n_trials: 2
+        model_building.n_trials: 400
         model_building.note: xgb-dax-pipeline with PCA
         model_building.num_splits: 17
         model_building.timeframe: 5m
@@ -197,364 +280,9 @@ stages:
     outs:
     - path: data/models/model_params_5m_v1.json
       hash: md5
-      md5: 4e2a42527b49b63dbdc996d598809268
-      size: 1790
+      md5: 7eb93b1f0f4ae960001bc4d1ee763747
+      size: 1802
     - path: data/models/optuna_trials.csv
       hash: md5
-      md5: 0062126095e0d5c69fe7b833a4c0e725
-      size: 2687
-  data_ingestion:
-    cmd: python src/data/data_ingestion.py
-    deps:
-    - path: data/src/DAX40_USDT_USDT-1m-futures.parquet
-      hash: md5
-      md5: 9390b12ad0ddf6ea4def248472fbe2e1
-      size: 23258815
-    - path: src/data/data_ingestion.py
-      hash: md5
-      md5: b5f18f140dc923c2cbe7bd62bf7ba93d
-      size: 5658
-    params:
-      params.yaml:
-        data_ingestion.data_path: data/src
-        data_ingestion.data_path_dest: data/raw
-        data_ingestion.file_name: '{ticker}-{timeframe}-futures.parquet'
-        data_ingestion.high_time_col: High
-        data_ingestion.high_time_col_wavelet: Close_wavelet
-        data_ingestion.index_barrier: 1
-        data_ingestion.index_base: 5
-        data_ingestion.indexes:
-        - 1
-        - 5
-        - 7
-        - 10
-        data_ingestion.indexes_higher:
-        - 7
-        - 10
-        data_ingestion.low_time_col: Low
-        data_ingestion.low_time_col_wavelet: Close_wavelet
-        data_ingestion.ticker: DAX40_USDT_USDT
-        data_ingestion.timeframe: 1m
-        data_ingestion.timeframe_minutes:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-        - 10
-        - 15
-        - 20
-        - 30
-        - 60
-        - 120
-        - 240
-        - 1440
-        data_ingestion.timeframe_scalers:
-        - 0.22
-        - 0.44
-        - 0.63
-        - 0.77
-        - 0.89
-        - 1
-        - 1.4
-        - 1.7
-        - 2
-        - 2.4
-        - 3.4
-        - 4.8
-        - 6.8
-        - 9.6
-        data_ingestion.timeframes:
-        - 10s
-        - 1m
-        - 2m
-        - 3m
-        - 4m
-        - 5m
-        - 10m
-        - 15m
-        - 20m
-        - 30m
-        - 1h
-        - 2h
-        - 4h
-        - 1d
-    outs:
-    - path: data/raw
-      hash: md5
-      md5: dbf0f8529d8241fbebd68a1a35811df7.dir
-      size: 35239427
-      nfiles: 3
-  model_evaluation:
-    cmd: python src/model/model_evaluation.py
-    deps:
-    - path: data/interim/data_static_features_15m.csv
-      hash: md5
-      md5: 82f152a4bb359b1a2778b881fd5f1369
-      size: 86921787
-    - path: data/interim/data_static_features_1h.csv
-      hash: md5
-      md5: 459f6dec5938bb4f2c03ad3ae440fb65
-      size: 22212872
-    - path: data/interim/data_static_features_5m.csv
-      hash: md5
-      md5: af8eb2a44ce2f95deaddecd5898b39e1
-      size: 283161545
-    - path: src/model/model_evaluation.py
-      hash: md5
-      md5: 39109aa507bb8736802dc736fe483a0f
-      size: 4763
-    params:
-      params.yaml:
-        model_evaluation.col_y:
-        - labeling_multi
-        model_evaluation.evals_strategy: false
-        model_evaluation.file_name: data_static_features_{timeframe}.csv
-        model_evaluation.index_base: 5
-        model_evaluation.indexes_higher:
-        - 7
-        - 10
-        model_evaluation.lags:
-        - 1
-        - 2
-        model_evaluation.list_X:
-        - ha_close
-        - Close
-        - tenkan_sen
-        - kijun_sen
-        - sine
-        - sine_diff_slope_2
-        - sine_diff_slope_5
-        - kama_trend_slow
-        - kama_trend_fast
-        - kama_trend_slow_diff
-        - kama_trend_fast_diff
-        - kama_trend_slow_diff2
-        - kama_trend_fast_diff2
-        - macdhist
-        - sma_cross
-        - lowerband_r
-        - stochk_slope
-        - dc_market_regime_ema_log
-        - ha_slope_2
-        - ema_cross
-        - log_ret_ha_1
-        - ppo
-        - upperband_r
-        - sar_r
-        - log_ret_ha_2
-        - stochd
-        - kama_diff
-        - bearish_gap
-        - rsi_slope
-        - sine_diff
-        - stochrsid
-        - stochrsik
-        - bullish_gap
-        - log_ret_ha_3
-        - ha_slope_10
-        - r_kijun_sen
-        - r_tenkan_sen
-        - displacement_hull
-        - displacement_hull_slope
-        - stochk
-        - ema_ha_sign
-        - ema_ha_wickstrength
-        - gap_hull
-        - gap_hull_slope
-        - di_plus
-        - di_minus
-        - cci_ha
-        - rsi
-        - rsi_ha
-        - di_diff
-        - willr
-        - close_wavelet_rolling
-        - permutation_entropy
-        - tail_index_1
-        - skew
-        - petrosian_fd
-        - long_pivot
-        - short_pivot
-        - atr
-        - adx
-        model_evaluation.num_splits: 17
-        model_evaluation.timeframe_scalers:
-        - 0.22
-        - 0.44
-        - 0.63
-        - 0.77
-        - 0.89
-        - 1
-        - 1.4
-        - 1.7
-        - 2
-        - 2.4
-        - 3.4
-        - 4.8
-        - 6.8
-        - 9.6
-        model_evaluation.timeframes:
-        - 10s
-        - 1m
-        - 2m
-        - 3m
-        - 4m
-        - 5m
-        - 10m
-        - 15m
-        - 20m
-        - 30m
-        - 1h
-        - 2h
-        - 4h
-        - 1d
-  model_registration:
-    cmd: python src/model/model_registration.py
-    deps:
-    - path: data/interim/data_static_features_15m.csv
-      hash: md5
-      md5: 82f152a4bb359b1a2778b881fd5f1369
-      size: 86921787
-    - path: data/interim/data_static_features_1h.csv
-      hash: md5
-      md5: 459f6dec5938bb4f2c03ad3ae440fb65
-      size: 22212872
-    - path: data/interim/data_static_features_5m.csv
-      hash: md5
-      md5: af8eb2a44ce2f95deaddecd5898b39e1
-      size: 283161545
-    - path: src/model/model_registration.py
-      hash: md5
-      md5: a5190d94902fb76283c28158a62601c2
-      size: 2653
-    params:
-      params.yaml:
-        model_registration.col_y:
-        - labeling_multi
-        model_registration.file_name: data_static_features_{timeframe}.csv
-        model_registration.index_base: 5
-        model_registration.indexes_higher:
-        - 7
-        - 10
-        model_registration.lags:
-        - 1
-        - 2
-        model_registration.list_X:
-        - ha_close
-        - Close
-        - tenkan_sen
-        - kijun_sen
-        - sine
-        - sine_diff_slope_2
-        - sine_diff_slope_5
-        - kama_trend_slow
-        - kama_trend_fast
-        - kama_trend_slow_diff
-        - kama_trend_fast_diff
-        - kama_trend_slow_diff2
-        - kama_trend_fast_diff2
-        - macdhist
-        - sma_cross
-        - lowerband_r
-        - stochk_slope
-        - dc_market_regime_ema_log
-        - ha_slope_2
-        - ema_cross
-        - log_ret_ha_1
-        - ppo
-        - upperband_r
-        - sar_r
-        - log_ret_ha_2
-        - stochd
-        - kama_diff
-        - bearish_gap
-        - rsi_slope
-        - sine_diff
-        - stochrsid
-        - stochrsik
-        - bullish_gap
-        - log_ret_ha_3
-        - ha_slope_10
-        - r_kijun_sen
-        - r_tenkan_sen
-        - displacement_hull
-        - displacement_hull_slope
-        - stochk
-        - ema_ha_sign
-        - ema_ha_wickstrength
-        - gap_hull
-        - gap_hull_slope
-        - di_plus
-        - di_minus
-        - cci_ha
-        - rsi
-        - rsi_ha
-        - di_diff
-        - willr
-        - close_wavelet_rolling
-        - permutation_entropy
-        - tail_index_1
-        - skew
-        - petrosian_fd
-        - long_pivot
-        - short_pivot
-        - atr
-        - adx
-        model_registration.models_path: data/models
-        model_registration.timeframe_scalers:
-        - 0.22
-        - 0.44
-        - 0.63
-        - 0.77
-        - 0.89
-        - 1
-        - 1.4
-        - 1.7
-        - 2
-        - 2.4
-        - 3.4
-        - 4.8
-        - 6.8
-        - 9.6
-        model_registration.timeframes:
-        - 10s
-        - 1m
-        - 2m
-        - 3m
-        - 4m
-        - 5m
-        - 10m
-        - 15m
-        - 20m
-        - 30m
-        - 1h
-        - 2h
-        - 4h
-        - 1d
-  model_analysis:
-    cmd: python src/model/model_analysis.py
-    deps:
-    - path: src/model/model_analysis.py
-      hash: md5
-      md5: 89a5839d66a42cb6e290cdeea0151697
-      size: 9440
-    params:
-      params.yaml:
-        model_analysis.analysis_path: data/models/analysis
-        model_analysis.target_metrics:
-        - optimisation_score
-        - total_profit
-        - sharpe_ratio
-        - win_rate
-        - profit_factor
-    outs:
-    - path: data/models/analysis/param_correlations_optimisation_score.png
-      hash: md5
-      md5: 956127d647092a38346683bd6a4f3c53
-      size: 201342
-    - path: data/models/analysis/param_metric_correlations.csv
-      hash: md5
-      md5: f34551e3c393a682d413fa5eaf841c7f
-      size: 3637
+      md5: a480b6d2d534a4fe17202ca16d6ade5b
+      size: 209116

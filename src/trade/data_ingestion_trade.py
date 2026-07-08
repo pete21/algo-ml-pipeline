@@ -10,6 +10,7 @@ import dvc.api
 TICKERS = {
     'DAX40': '6374',
     'NQ100': '16917',
+    'SP500': '872703',
 }
 
 load_dotenv()
@@ -17,24 +18,40 @@ questdb_url = os.getenv('QUESTDB_URL')
 questdb_user = os.getenv('QUESTDB_USER')
 questdb_password = os.getenv('QUESTDB_PASSWORD')
 
+# QUERY_TEMPLATE = """SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s where timestamp>=%(start_date)s
+# UNION
+# SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(tickstream_table)s where timestamp > (select max(timestamp) FROM %(table)s);"""
+
+QUERY_TEMPLATE = """SELECT timestamp as date, first(open) as Open, max(high) as High, min(low) as Low, last(close) as Close FROM
+(
+SELECT timestamp, open, high, low, close FROM %(table)s where timestamp>=%(start_date)s
+UNION
+SELECT timestamp, open, high, low, close FROM %(gaps_table)s where timestamp > (select max(timestamp) FROM %(table)s)
+UNION
+SELECT timestamp, open, high, low, close FROM %(tickstream_table)s where timestamp > (select max(timestamp) FROM %(table)s)
+) group by date;"""
+
+
 
 def load_data_from_questdb(params: dict, connection: Connection, logger: logging.Logger) -> dict:
     """Load data from QuestDB."""
     try:
         data = {}
         for i in params['data_ingestion']['indexes_higher'] + [params['data_ingestion']['index_base']]:
-            query = "SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s WHERE timestamp > '2026-01-01';"
-            data[i] = pd.read_sql_query(query,
-            con=connection,
-            index_col='date',
-            parse_dates=['date'],
-            params={"table" : params['data_ingestion_trade']['table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion']['timeframes'][i].upper())}
-            )
-            print(data[i].head())
+            # query = "SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s WHERE timestamp > '2026-03-01';"
+            query = QUERY_TEMPLATE
+            query_params = {
+                "table" : params['data_ingestion_trade']['table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion']['timeframes'][i].upper()),
+                "tickstream_table" : params['data_ingestion_trade']['tickstream_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion']['timeframes'][i].upper()),
+                "gaps_table" : params['data_ingestion_trade']['gaps_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion']['timeframes'][i].upper()),
+                "start_date" : params['data_ingestion_trade']['start_date']
+            }
+            print(query % query_params)
+            data[i] = pd.read_sql_query(query, con=connection, params=query_params, index_col='date', parse_dates=['date'])
+            data[i] = data[i].iloc[:-1]     # remove last row of unfinished candle
+            print(data[i].tail())
         return data
-    except pd.errors.ParserError as e:
-        logger.error('Failed to parse the parquet file: %s', e)
-        raise
+
     except Exception as e:
         logger.error('Unexpected error occurred while loading the data: %s', e)
         raise
@@ -49,16 +66,16 @@ def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
                 + pd.to_timedelta(params['data_ingestion']['timeframe_minutes'][i], "m")
                 - pd.to_timedelta(params['data_ingestion']['timeframe_minutes'][params['data_ingestion']['index_base']], "m")
             )
-            print(data[i].head())
+            # print(data[i].head())
 
-        unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['data_ingestion']['index_base'])
+        unique_dates, unique_weekdates = get_dates(data, params['data_ingestion']['index_base'])
 
         for i in params['data_ingestion']['indexes_higher'] + [params['data_ingestion']['index_base']]:
             data[i] = static_features(data[i], unique_weekdates, params['data_ingestion']['timeframe_scalers'][i], high_col="High", low_col="Low", open_col="Open", close_col="Close")
             if i != params['data_ingestion']['index_base']:
                 data[i].drop(columns=['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos'], inplace=True)
 
-        print(data[params['data_ingestion']['index_base']].head())
+            print(data[i].tail())
 
         return data
     except Exception as e:
@@ -67,20 +84,17 @@ def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
 
 
 def save_data(data: dict, params: dict, data_path: str, logger: logging.Logger) -> None:
-    """Save the train and test datasets, creating the raw folder if it doesn't exist."""
+    """Save the Questdb static features data, creating the data folder if it doesn't exist."""
     try:
         
         # Create the data/raw directory if it does not exist
         os.makedirs(data_path, exist_ok=True)
         
-        # Save the train and test data
-        data[params['data_ingestion']['index_base']].to_csv(f'{data_path}/questdb_static_features_{params['data_ingestion']['timeframes'][params['data_ingestion']['index_base']]}.csv')
-
-        for i in params['data_ingestion']['indexes_higher']:
+        for i in params['data_ingestion']['indexes_higher'] + [params['data_ingestion']['index_base']]:
             print(f'Timeframe: {params['data_ingestion']['timeframes'][i]}')
             data[i].to_csv(f'{data_path}/questdb_static_features_{params['data_ingestion']['timeframes'][i]}.csv')
         
-        logger.debug('Train and test data saved to %s', data_path)
+        logger.debug('Questdb static features data saved to %s', data_path)
     except Exception as e:
         logger.error('Unexpected error occurred while saving the data: %s', e)
         raise
@@ -103,7 +117,7 @@ def main(logger: logging.Logger):
         data = preprocess_data(src_data, params, logger)
 
         # Save the data
-        save_data(data, params, params['data_preprocessing']['data_path_dest'], logger)
+        save_data(data, params, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'), logger)
 
     except Exception as e:
         logger.error('Failed to complete the data ingestion process: %s', e)
@@ -118,7 +132,7 @@ if __name__ == '__main__':
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG)
 
-    file_handler = logging.FileHandler('trade_errors.log')
+    file_handler = logging.FileHandler('trade_agent_log.log')
     file_handler.setLevel(logging.ERROR)
 
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

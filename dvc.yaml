@@ -3,11 +3,15 @@ stages:
     cmd: python src/data/data_ingestion.py
     deps:
     - src/data/data_ingestion.py
-    - ${data_ingestion.data_path}/${data_ingestion.ticker}-${data_ingestion.timeframe}-futures.parquet
+    # - ${data_ingestion.data_path}/${data_ingestion.ticker}-${data_ingestion.timeframe}-futures.parquet
     params:
     - data_ingestion.data_path
     - data_ingestion.data_path_dest
     - data_ingestion.ticker
+    - data_ingestion.data_source
+    - data_ingestion.table_name
+    - data_ingestion.start_date
+    - data_ingestion.end_date
     - data_ingestion.timeframe
     - data_ingestion.timeframes
     - data_ingestion.timeframe_minutes
@@ -23,15 +27,15 @@ stages:
     - data_ingestion.low_time_col_wavelet
 
     outs:
-    - data/raw
+    - ${data_ingestion.data_path_dest}
 
   
   data_preprocessing:
     cmd: python src/data/data_preprocessing.py
     deps:
-    - ${data_preprocessing.data_path}/data_ohlc_features_1h.csv
-    - ${data_preprocessing.data_path}/data_ohlc_features_15m.csv
-    - ${data_preprocessing.data_path}/data_ohlc_features_5m.csv
+    - ${data_preprocessing.data_path}/data_ohlc_1h.csv
+    - ${data_preprocessing.data_path}/data_ohlc_15m.csv
+    - ${data_preprocessing.data_path}/data_ohlc_5m.csv
     - src/data/data_preprocessing.py
     params:
     - data_preprocessing.data_path
@@ -42,8 +46,7 @@ stages:
     - data_preprocessing.timeframe_scalers
     - data_preprocessing.file_name
     outs:
-    - data/interim
-
+    - ${data_preprocessing.data_path_dest}
 
   
   model_building:
@@ -74,7 +77,7 @@ stages:
     outs:
     - ${model_building.models_path}/model_params_${model_building.timeframe}_v${model_building.version}.json
     - ${model_building.models_path}/optuna_trials.csv
-    # - data/models/model_params_5m_v1.json
+    # - ${model_building.models_path}/model_params_5m_v1.json
 
 
   model_evaluation:

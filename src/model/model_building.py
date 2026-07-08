@@ -171,8 +171,7 @@ def main():
         cutoff_date = date(2024,6,1)
         for d in data:
             data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
-        unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
-        print(mondays_indexes)
+        unique_dates, unique_weekdates = get_dates(data, params['model_building']['index_base'])
 
         experiment_name = f'xgb-dax-pipeline-v{params["model_building"]["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
         if params['model_building']['evals_strategy']:
@@ -186,7 +185,7 @@ def main():
         # experiment = mlflow.get_experiment(experiment_id=experiment_id)
 
         study = optuna.create_study(direction='maximize')
-        study.optimize(lambda trial: objective(trial, data, params['model_building'], cutoff_date, unique_dates, mondays_indexes, experiment_id), n_trials=params['model_building']['n_trials'])
+        study.optimize(lambda trial: objective(trial, data, params['model_building'], cutoff_date, unique_weekdates, experiment_id), n_trials=params['model_building']['n_trials'])
         print("Best trial number: ", study.best_trial.number)
         print("Best parameters: ", study.best_params)
         print("Best score:", study.best_value)

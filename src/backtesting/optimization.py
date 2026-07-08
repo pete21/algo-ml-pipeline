@@ -7,7 +7,7 @@ from random import random
 from datetime import datetime
 import os
 
-from xgboost import DMatrix
+# from xgboost import DMatrix
 from src.data_utils.utils import getXy
 from src.data_utils.features import build_target
 from src.backtesting.strategies import do_backtest_Strategy2_trading, do_backtest_Strategy2_evals, do_backtest_Strategy2_training
@@ -40,7 +40,7 @@ LOG_SPLITS_TABLE = {
     }
 
 
-def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: list, mondays_indexes: list, experiment_id: str, model_params_override: dict = None) -> float:
+def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: list, experiment_id: str, model_params_override: dict = None) -> float:
 
     index_base = params['index_base']
     indexes_higher = params['indexes_higher']
@@ -103,7 +103,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 8, 18),
 
             'gap_lookback': trial.suggest_int('gap_lookback', 2, 7),
-            'gap_hull_period': trial.suggest_int('gap_hull_period', 3, 30),
+            'gap_hull_period': trial.suggest_int('gap_hull_period', 4, 30),             # minimum 4
             'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 3, 15),
 
             'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.002, 0.005),
@@ -126,10 +126,10 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 10, 20),
             'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 3, 15),
             'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 10, 20),
-            'train_range_len': trial.suggest_int('train_range_len', 12, 15),
+            'train_range_len': trial.suggest_int('train_range_len', 14, 18),
             'test_range_len': trial.suggest_int('test_range_len', 4, 4),  #3,5
-            'hour_range_start': trial.suggest_int('hour_range_start', 9, 10),
-            'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
+            'hour_range_start': trial.suggest_int('hour_range_start', 4, 8),
+            # 'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
             'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
             'di_timeperiod': trial.suggest_int('di_timeperiod', 5, 15),
             'macd_slope_period': trial.suggest_int('macd_slope_period', 9, 9),
@@ -150,12 +150,17 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'threshold_long': trial.suggest_float('threshold_long', 0.8, 0.84),
             'threshold_short': trial.suggest_float('threshold_short', 0.15, 0.2),
             'pred_ewm_span': trial.suggest_float('pred_ewm_span', 1, 2),
-            'pca_ichimoku': trial.suggest_categorical('pca_ichimoku', [True, False]),
-            'pca_kama': trial.suggest_categorical('pca_kama', [True, False]),
+            'pca_ichimoku': trial.suggest_categorical('pca_ichimoku', [True]),
+            'pca_kama': trial.suggest_categorical('pca_kama', [False]),
+            'weekday': trial.suggest_categorical('weekday', [0, 2, 4]),                     # 0: Monday, 2: Wednesday, 4: Friday
         }
 
-        if params['evals_strategy']:
-            model_params['sl'] = trial.suggest_int('sl', model_params['tp'] // 1.5, model_params['tp'] // 1.5)
+        if not model_params_override:
+            model_params['hour_range_stop'] = trial.suggest_int('hour_range_stop', model_params['hour_range_start'] + 10, model_params['hour_range_start'] + 10)
+
+            if params['evals_strategy']:
+                model_params['sl'] = trial.suggest_int('sl', model_params['tp'] // 1.5, model_params['tp'] // 1.5)
+
 
         data[index_base].loc[:,"labeling_binary"], data[index_base].loc[:,"labeling_dual_ema"], data[index_base].loc[:,"labeling_multi"] = build_target(data[index_base], \
             open_col='Open', high_col='High', low_col='Low', high_time_col="high_time", low_time_col="low_time", \
@@ -176,11 +181,12 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         num_splits = params['num_splits']
 
         # Split the dataset to test and train sets
-        # Split the initial 70% of the data as training set and the remaining 30% data as the testing set
-        num_mondays = len(mondays_indexes)
+        split_weekdays = [i for i, n in enumerate(unique_dates) if n.weekday() == model_params['weekday']]
+        num_splits_weekdays = len(split_weekdays)
+
         splits_array = LOG_SPLITS_TABLE[num_splits]
-        mondays_splits = [int(5 + (num_mondays-5) * (random()/2 + i) / num_splits) for i in splits_array] # range(1, num_splits)]
-        train_splits = [mondays_indexes[i] for i in mondays_splits]
+        splits = [int(5 + (num_splits_weekdays-5) * (random()/2 + i) / num_splits) for i in splits_array] # range(1, num_splits)]
+        train_splits = [split_weekdays[i] for i in splits]
         print(train_splits)
 
         print(datetime.now().strftime('%H:%M:%S'))
@@ -288,7 +294,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             sharpe_coeff = np.log(sharpe_mean) if sharpe_mean > 1 else sharpe_mean-1
 
             if params['evals_strategy']:
-                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) / np.log(model_params['test_range_len']-0.5) * (0.5 + sharpe_coeff/10 + win_rate + np.log(total_trades)/20 - avg_win/avg_loss/5)
+                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) / np.log(model_params['test_range_len']-0.5) * (0.5 + sharpe_coeff/10 + win_rate + np.log(total_trades)/20 - avg_win/avg_loss/10)
             else:
                 optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) / np.log(model_params['test_range_len']-0.5) * (1 + sharpe_coeff/10 + win_rate/10 + np.log(total_trades)/10 - avg_win/avg_loss/20) #* np.sqrt(max(np.mean(sortino)+np.mean(calmar), 1)) / (parameters['hour_range_stop']-parameters['hour_range_start']+2)
 
@@ -394,7 +400,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
     return optimisation_score
 
 
-def train_register_model(data: dict, params: dict, unique_dates: list, train_split_index: int, experiment_id: str, model_params: dict) -> str:
+def train_register_model(data: dict, params: dict, unique_weekdates: list, train_split_index: int, experiment_id: str, model_params: dict) -> str:
 
     index_base = params['index_base']
     indexes_higher = params['indexes_higher']
@@ -411,7 +417,7 @@ def train_register_model(data: dict, params: dict, unique_dates: list, train_spl
     # print(f"Experiment ID: {experiment_id}")
 
     # mlflow.xgboost.autolog()
-    run_name = f"Train_Register_Model_{unique_dates[train_split_index]}"
+    run_name = f"Train_Register_Model_{unique_weekdates[train_split_index]}"
     with mlflow.start_run(run_name=run_name) as run:
         mlflow.log_params(params)
 
@@ -440,8 +446,8 @@ def train_register_model(data: dict, params: dict, unique_dates: list, train_spl
         mlflow.log_param('indexes_higher', indexes_higher)
 
 
-        train_split = unique_dates[train_splits[-1]]
-        train_start_idx = unique_dates[max(train_splits[-1]-model_params['train_range_len']*5, 1)]
+        train_split = unique_weekdates[train_splits[-1]]
+        train_start_idx = unique_weekdates[max(train_splits[-1]-model_params['train_range_len']*5, 1)]
 
         X_train = X.loc[(X.index.date>train_start_idx) & (X.index.date<=train_split)]
         y_train = y.loc[(X.index.date>train_start_idx) & (X.index.date<=train_split)]

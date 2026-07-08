@@ -1,3 +1,4 @@
+aiobotocore[boto3]
 boto3
 fastapi
 mlflow
