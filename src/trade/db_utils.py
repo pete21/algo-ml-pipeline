@@ -106,11 +106,10 @@ def get_open_orders(connection: mysql.connector.MySQLConnection, ticker: str) ->
 
 
 def update_order_from_kafka_event(connection: mysql.connector.MySQLConnection, event: dict, logger: logging.Logger) -> None:
-    """Update orders.status from a market broker transaction event."""
+    """Update order from a market broker transaction event."""
     print("Kafka event: %s", event)
     logger.info("Kafka event: %s", event)
     order_id = event.get('o')
-    position_id = event.get('p')
     event_type = event.get('type')
     if order_id is None or event_type is None:
         logger.warning('Transaction event missing required fields: %s', event)
@@ -121,21 +120,34 @@ def update_order_from_kafka_event(connection: mysql.connector.MySQLConnection, e
         logger.debug('Ignoring transaction event with unhandled type %s: %s', event_type, event)
         return
 
+    position_id = event.get('p')
+    price = event.get('price')
     try:
         cursor = connection.cursor()
-        if status==TRANSACTION_TYPE_TO_STATUS['FILLED']:
-            sql = f'UPDATE {ORDERS_TABLE} SET status = %s, position_id = %s WHERE order_id = %s and status = 1'
-            cursor.execute(sql, (status, int(position_id), int(order_id)))
-        else:
-            sql = f'UPDATE {ORDERS_TABLE} SET status = %s WHERE order_id = %s'
-            cursor.execute(sql, (status, int(order_id)))
+
+        match event_type:
+            case 'PENDING':
+                sql = f'UPDATE {ORDERS_TABLE} SET status = %s, updated_at = NOW() WHERE order_id = %s and status = 0'
+                cursor.execute(sql, (status, int(order_id)))
+            case 'FILLED':
+                sql = f'UPDATE {ORDERS_TABLE} SET status = %s, position_id = %s, open_price = %s, updated_at = NOW() WHERE order_id = %s and status in (0,1)'
+                cursor.execute(sql, (status, int(position_id), float(price), int(order_id)))
+            case 'CLOSED':
+                sql = f'UPDATE {ORDERS_TABLE} SET status = %s, close_price = %s, updated_at = NOW() WHERE order_id = %s and status = 2'
+                cursor.execute(sql, (status, float(price), int(order_id)))
+            case 'CANCELLED':
+                sql = f'UPDATE {ORDERS_TABLE} SET status = %s, updated_at = NOW() WHERE order_id = %s and status in (0,1)'
+                cursor.execute(sql, (status, int(order_id)))
+            case _:
+                logger.warning('Ignoring transaction event with unhandled type %s: %s', event_type, event)
+
         connection.commit()
         if cursor.rowcount > 0:
             logger.info('Updated order %s status to %s (%s)', order_id, status, event_type)
         else:
-            logger.warning('No order found with order_id=%s or order status not in (1,2) for event %s', order_id, event)
+            logger.warning('No order updated for event %s', event)
     except Exception as exc:
-        logger.error('Failed to update order from transaction: %s', exc)
+        logger.error('Failed to update order from event: %s', exc)
     finally:
         cursor.close()
 

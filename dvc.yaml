@@ -14,8 +14,6 @@ stages:
     - data_ingestion.end_date
     - data_ingestion.timeframe
     - data_ingestion.timeframes
-    - data_ingestion.timeframe_minutes
-    - data_ingestion.timeframe_scalers
     - data_ingestion.indexes
     - data_ingestion.index_barrier
     - data_ingestion.index_base
@@ -45,6 +43,7 @@ stages:
     - data_preprocessing.timeframes
     - data_preprocessing.timeframe_scalers
     - data_preprocessing.file_name
+    - data_preprocessing.local_timezone
     outs:
     - ${data_preprocessing.data_path_dest}
 
@@ -74,6 +73,7 @@ stages:
     - model_building.model_name
     - model_building.model_params_name
     - model_building.evals_strategy
+    - model_building.local_timezone
     outs:
     - ${model_building.models_path}/model_params_${model_building.timeframe}_v${model_building.version}.json
     - ${model_building.models_path}/optuna_trials.csv
@@ -88,19 +88,20 @@ stages:
     - ${model_building.data_path}/data_static_features_1h.csv
     - src/model/model_evaluation.py
     params:
+    - model_evaluation.dummy
     # - model_evaluation.models_path
     # - model_evaluation.timeframe
-    - model_evaluation.index_base
-    - model_evaluation.indexes_higher
-    - model_evaluation.timeframes
-    - model_evaluation.timeframe_scalers
-    - model_evaluation.file_name
-    - model_evaluation.list_X
-    - model_evaluation.col_y
-    - model_evaluation.lags
-    # - model_evaluation.version
-    - model_evaluation.num_splits
-    - model_evaluation.evals_strategy
+    # - model_evaluation.index_base
+    # - model_evaluation.indexes_higher
+    # - model_evaluation.timeframes
+    # - model_evaluation.timeframe_scalers
+    # - model_evaluation.file_name
+    # - model_evaluation.list_X
+    # - model_evaluation.col_y
+    # - model_evaluation.lags
+    # # - model_evaluation.version
+    # - model_evaluation.num_splits
+    # - model_evaluation.evals_strategy
     # - model_evaluation.model_params_name
     # outs:
     # - data/models

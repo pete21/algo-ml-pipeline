@@ -98,8 +98,8 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
 
         model_params = fetch_model_params(url=MODEL_PARAMS_URL, logger=logger)
         print(f"Loaded model params: {model_params}")
-        model_params['hour_range_start'] = 2
-        model_params['hour_range_stop'] = 20
+        model_params['hour_range_start'] = 2*60
+        model_params['hour_range_stop'] = 20*60
 
         p={}
         for i in params['model_building']['indexes_higher']:

@@ -8,8 +8,6 @@ data_ingestion:
   end_date: '2026-06-30'
   timeframe: '1m'
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
-  timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
-  timeframe_minutes: [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 60, 120, 240, 1440]
   indexes: [1,5,7,10]
   index_barrier: 1
   index_base: 5
@@ -28,6 +26,7 @@ data_preprocessing:
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
   file_name: 'data_ohlc_{timeframe}.csv'
+  local_timezone: 'Europe/Berlin'
 
 model_building:
   data_path: 'data/interim'
@@ -37,6 +36,7 @@ model_building:
   indexes_higher: [7,10]
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
+  timeframe_minutes: [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 60, 120, 240, 1440]
   file_name: 'data_static_features_{timeframe}.csv'
   list_X: [
     'ha_close',
@@ -156,138 +156,138 @@ model_building:
   version: 1
   model_name: 'xgboost_model_with_pca_v1'
   model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 400
-  num_splits: 17
+  n_trials: 100
+  num_splits: 25
   note: 'xgb-dax-pipeline with PCA'
   evals_strategy: False
-
+  local_timezone: 'Europe/Berlin'
 
 model_evaluation:
+  dummy: True
   # data_path: 'data/interim'
   # models_path: 'data/models'
   # timeframe: '5m'
-  index_base: 5
-  indexes_higher: [7,10]
-  timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
-  timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
-  file_name: 'data_static_features_{timeframe}.csv'
-  list_X: [
-    'ha_close',
-    #'ha_low',
-    # 'High',
-    # 'Low',
-    'Close',
-    #'midprice',
-    # 'Open',
-    #'ha_high',
-    #'macdsignal',
-    #'ha_open',
-    #'sar',
-    'tenkan_sen',
-    #'ema1',
-    #'sma1',
-    'kijun_sen',
-    #'lowerband',
-    'sine',
-    #'middleband',
-    #'upperband',
-    'sine_diff_slope_2',
-    #'ema2',
-    #'sma2',
-    'sine_diff_slope_5',
-    'kama_trend_slow',
-    'kama_trend_fast',
-    'kama_trend_slow_diff',
-    'kama_trend_fast_diff',
-    'kama_trend_slow_diff2',
-    'kama_trend_fast_diff2',
-    'macdhist',
-    'sma_cross',
-    #'log_ret_1',
-    'lowerband_r',
-    #'down_displacement_low',
-    #'down_displacement_high',
-    #'bullish_gap_size',
-    #'dc_market_regime',
-    #'displacement',
-    #'bearish_gap_size',
-    #'macd',
-    'stochk_slope',
-    #'dc_market_regime_ema',
-    #'dc_market_regime_wma',
-    'dc_market_regime_ema_log',
-    'ha_slope_2',
-    'ema_cross',
-    'log_ret_ha_1',
-    #'log_ret_2',
-    'ppo',
-    'upperband_r',
-    'sar_r',
-    'log_ret_ha_2',
-    #'ha_slope_15',
-    'stochd',
-    'kama_diff',
-    #'bullish_gap_low',
-    #'bullish_gap_high',
-    'bearish_gap',
-    #'log_ret_3',
-    'rsi_slope',
-    'sine_diff',
-    'stochrsid',
-    #'bearish_gap_low',
-    #'bearish_gap_high',
-    'stochrsik',
-    'bullish_gap',
-    'log_ret_ha_3',
-    #'ha_slope_5',
-    'ha_slope_10',
-    #'log_ret_4',
-    'r_kijun_sen',
-    #'ema_ha_upper_wick',
-    #'log_ret_ha_4',
-    #'displacement_sma',
-    'r_tenkan_sen',
-    #'ha_sign',
-    #'log_ret_ha_5',
-    #'log_ret_5',
-    #'middleband_r',
-    #'ema_ha_lower_wick',
-    'displacement_hull',
-    'displacement_hull_slope',
-    'stochk',
-    'ema_ha_sign',
-    'ema_ha_wickstrength',
-    'gap_hull',
-    'gap_hull_slope',
-    'di_plus',
-    'di_minus',
-    'cci_ha',
-    #'cci',
-    'rsi',
-    'rsi_ha',
-    'di_diff',
-    'willr',
-    #'vol_short_pca1',
-    #'vol_long_pca1',
-    #'wavelet_reconstr',
-    #'hurst',
-    #'hurst_kalman',
-    'close_wavelet_rolling',
-    # 'close_regr_entropy',
-    'permutation_entropy',
-    "tail_index_1",
-    "skew",
-    "petrosian_fd",
+  # index_base: 5
+  # indexes_higher: [7,10]
+  # timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
+  # timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
+  # list_X: [
+  #   'ha_close',
+  #   #'ha_low',
+  #   # 'High',
+  #   # 'Low',
+  #   'Close',
+  #   #'midprice',
+  #   # 'Open',
+  #   #'ha_high',
+  #   #'macdsignal',
+  #   #'ha_open',
+  #   #'sar',
+  #   'tenkan_sen',
+  #   #'ema1',
+  #   #'sma1',
+  #   'kijun_sen',
+  #   #'lowerband',
+  #   'sine',
+  #   #'middleband',
+  #   #'upperband',
+  #   'sine_diff_slope_2',
+  #   #'ema2',
+  #   #'sma2',
+  #   'sine_diff_slope_5',
+  #   'kama_trend_slow',
+  #   'kama_trend_fast',
+  #   'kama_trend_slow_diff',
+  #   'kama_trend_fast_diff',
+  #   'kama_trend_slow_diff2',
+  #   'kama_trend_fast_diff2',
+  #   'macdhist',
+  #   'sma_cross',
+  #   #'log_ret_1',
+  #   'lowerband_r',
+  #   #'down_displacement_low',
+  #   #'down_displacement_high',
+  #   #'bullish_gap_size',
+  #   #'dc_market_regime',
+  #   #'displacement',
+  #   #'bearish_gap_size',
+  #   #'macd',
+  #   'stochk_slope',
+  #   #'dc_market_regime_ema',
+  #   #'dc_market_regime_wma',
+  #   'dc_market_regime_ema_log',
+  #   'ha_slope_2',
+  #   'ema_cross',
+  #   'log_ret_ha_1',
+  #   #'log_ret_2',
+  #   'ppo',
+  #   'upperband_r',
+  #   'sar_r',
+  #   'log_ret_ha_2',
+  #   #'ha_slope_15',
+  #   'stochd',
+  #   'kama_diff',
+  #   #'bullish_gap_low',
+  #   #'bullish_gap_high',
+  #   'bearish_gap',
+  #   #'log_ret_3',
+  #   'rsi_slope',
+  #   'sine_diff',
+  #   'stochrsid',
+  #   #'bearish_gap_low',
+  #   #'bearish_gap_high',
+  #   'stochrsik',
+  #   'bullish_gap',
+  #   'log_ret_ha_3',
+  #   #'ha_slope_5',
+  #   'ha_slope_10',
+  #   #'log_ret_4',
+  #   'r_kijun_sen',
+  #   #'ema_ha_upper_wick',
+  #   #'log_ret_ha_4',
+  #   #'displacement_sma',
+  #   'r_tenkan_sen',
+  #   #'ha_sign',
+  #   #'log_ret_ha_5',
+  #   #'log_ret_5',
+  #   #'middleband_r',
+  #   #'ema_ha_lower_wick',
+  #   'displacement_hull',
+  #   'displacement_hull_slope',
+  #   'stochk',
+  #   'ema_ha_sign',
+  #   'ema_ha_wickstrength',
+  #   'gap_hull',
+  #   'gap_hull_slope',
+  #   'di_plus',
+  #   'di_minus',
+  #   'cci_ha',
+  #   #'cci',
+  #   'rsi',
+  #   'rsi_ha',
+  #   'di_diff',
+  #   'willr',
+  #   #'vol_short_pca1',
+  #   #'vol_long_pca1',
+  #   #'wavelet_reconstr',
+  #   #'hurst',
+  #   #'hurst_kalman',
+  #   'close_wavelet_rolling',
+  #   # 'close_regr_entropy',
+  #   'permutation_entropy',
+  #   "tail_index_1",
+  #   "skew",
+  #   "petrosian_fd",
 
-    'long_pivot',
-    'short_pivot',
-    'atr',
-    'adx',
-    ]
-  col_y: ['labeling_multi']
-  lags: [1,2]
-  num_splits: 17
-  evals_strategy: False
+  #   'long_pivot',
+  #   'short_pivot',
+  #   'atr',
+  #   'adx',
+  #   ]
+  # col_y: ['labeling_multi']
+  # lags: [1,2]
+  # num_splits: 25
+  # evals_strategy: False
 
 
 model_registration:
@@ -430,6 +430,13 @@ data_ingestion_trade:
   gaps_table_name: 'GAPS_{ticker}_OHLC_{timeframe}'
   ticker: 'DAX40'
   start_date: '2026-05-01'
+  local_timezone: 'Europe/Berlin'
+  timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
+  timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
+  timeframe_minutes: [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 60, 120, 240, 1440]
+  index_base: 5
+  indexes_higher: [7,10]
+
 
 model_inference_trade:
   file_name: 'questdb_static_features_{timeframe}.csv'

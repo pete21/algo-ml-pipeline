@@ -792,19 +792,19 @@ def calc_kernel_pca(df, day_range, window, col_features, col_pca_comp):
         current_date = day_range[current_date_ind]
         current_date_window_start = day_range[current_date_ind-window]
         # Get data for current date
-        current_slice = df[df.index.date == current_date]
+        current_slice = df[df['local_date'].dt.date == current_date][col_features]
         if current_slice.shape[0]==0:
             print(f"Current slice is empty for {current_date}")
             continue
         # Get data for previous 'window' days
-        mask = (df.index.date < current_date) & (df.index.date >= current_date_window_start)
-        historical_slice = df[mask]
-    #    print(current_slice.shape)
-    #    print(historical_slice.shape)
+        mask = (df['local_date'].dt.date < current_date) & (df['local_date'].dt.date >= current_date_window_start)
+        historical_slice = df[mask][col_features]
+        # print(current_slice)
+        # print(historical_slice)
     
         # Standardize the features using the training set
-        historical_slice_scaled = scaler.fit_transform(historical_slice[col_features])  # Fit on training data
-        current_slice_scaled = scaler.transform(current_slice[col_features])
+        historical_slice_scaled = scaler.fit_transform(historical_slice)  # Fit on training data
+        current_slice_scaled = scaler.transform(current_slice)
     
         # Train the PCA on the train set
         pca.fit(historical_slice_scaled)
@@ -814,8 +814,12 @@ def calc_kernel_pca(df, day_range, window, col_features, col_pca_comp):
     
         current_slice_scaled_pca_scores_df = pd.DataFrame(current_slice_scaled_pca_scores, columns = col_pca_comp, index=current_slice.index)
         current_slice_scaled_pca_scores_df['date'] = current_slice.index
+        # print(current_slice_scaled_pca_scores_df)
         current_slice_scaled_pca_scores_df_sum = pd.concat([current_slice_scaled_pca_scores_df_sum, current_slice_scaled_pca_scores_df])
-        current_slice_scaled_pca_scores_df_sum.set_index(['date'], inplace=True)
+        # print(current_slice_scaled_pca_scores_df_sum)
+    
+    
+    current_slice_scaled_pca_scores_df_sum.set_index(['date'], inplace=True)
     return current_slice_scaled_pca_scores_df_sum
 
 

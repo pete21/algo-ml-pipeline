@@ -1,8 +1,9 @@
 import pandas as pd
 import os
 import logging
+
+import pytz
 from src.data_utils.static_features import static_features
-from src.data_utils.utils import get_dates
 from sqlalchemy import Connection, create_engine
 from dotenv import load_dotenv
 import dvc.api
@@ -37,13 +38,13 @@ def load_data_from_questdb(params: dict, connection: Connection, logger: logging
     """Load data from QuestDB."""
     try:
         data = {}
-        for i in params['data_ingestion']['indexes_higher'] + [params['data_ingestion']['index_base']]:
+        for i in params['data_ingestion_trade']['indexes_higher'] + [params['data_ingestion_trade']['index_base']]:
             # query = "SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s WHERE timestamp > '2026-03-01';"
             query = QUERY_TEMPLATE
             query_params = {
-                "table" : params['data_ingestion_trade']['table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion']['timeframes'][i].upper()),
-                "tickstream_table" : params['data_ingestion_trade']['tickstream_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion']['timeframes'][i].upper()),
-                "gaps_table" : params['data_ingestion_trade']['gaps_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion']['timeframes'][i].upper()),
+                "table" : params['data_ingestion_trade']['table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion_trade']['timeframes'][i].upper()),
+                "tickstream_table" : params['data_ingestion_trade']['tickstream_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion_trade']['timeframes'][i].upper()),
+                "gaps_table" : params['data_ingestion_trade']['gaps_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion_trade']['timeframes'][i].upper()),
                 "start_date" : params['data_ingestion_trade']['start_date']
             }
             print(query % query_params)
@@ -60,20 +61,20 @@ def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
     """Preprocess the data by adding date_merge column and static features"""
     try:
 
-        for i in params['data_ingestion']['indexes_higher']:
+        for i in params['data_ingestion_trade']['indexes_higher']:
             data[i]["date_merge"] = (
                 data[i].index
-                + pd.to_timedelta(params['data_ingestion']['timeframe_minutes'][i], "m")
-                - pd.to_timedelta(params['data_ingestion']['timeframe_minutes'][params['data_ingestion']['index_base']], "m")
+                + pd.to_timedelta(params['data_ingestion_trade']['timeframe_minutes'][i], "m")
+                - pd.to_timedelta(params['data_ingestion_trade']['timeframe_minutes'][params['data_ingestion_trade']['index_base']], "m")
             )
             # print(data[i].head())
 
-        unique_dates, unique_weekdates = get_dates(data, params['data_ingestion']['index_base'])
-
-        for i in params['data_ingestion']['indexes_higher'] + [params['data_ingestion']['index_base']]:
-            data[i] = static_features(data[i], unique_weekdates, params['data_ingestion']['timeframe_scalers'][i], high_col="High", low_col="Low", open_col="Open", close_col="Close")
-            if i != params['data_ingestion']['index_base']:
-                data[i].drop(columns=['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos'], inplace=True)
+        for i in params['data_ingestion_trade']['indexes_higher'] + [params['data_ingestion_trade']['index_base']]:
+            local_timezone = pytz.timezone(params['data_ingestion_trade']['local_timezone'])
+            data[i]['local_date'] = data[i].index.tz_localize('UTC').tz_convert(local_timezone)
+            data[i] = static_features(data[i], params['data_ingestion_trade']['timeframe_scalers'][i], high_col="High", low_col="Low", open_col="Open", close_col="Close")
+            if i != params['data_ingestion_trade']['index_base']:
+                data[i].drop(columns=['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'minute_of_day'], inplace=True)
 
             print(data[i].tail())
 
@@ -90,9 +91,9 @@ def save_data(data: dict, params: dict, data_path: str, logger: logging.Logger) 
         # Create the data/raw directory if it does not exist
         os.makedirs(data_path, exist_ok=True)
         
-        for i in params['data_ingestion']['indexes_higher'] + [params['data_ingestion']['index_base']]:
-            print(f'Timeframe: {params['data_ingestion']['timeframes'][i]}')
-            data[i].to_csv(f'{data_path}/questdb_static_features_{params['data_ingestion']['timeframes'][i]}.csv')
+        for i in params['data_ingestion_trade']['indexes_higher'] + [params['data_ingestion_trade']['index_base']]:
+            print(f'Timeframe: {params['data_ingestion_trade']['timeframes'][i]}')
+            data[i].to_csv(f'{data_path}/questdb_static_features_{params['data_ingestion_trade']['timeframes'][i]}.csv')
         
         logger.debug('Questdb static features data saved to %s', data_path)
     except Exception as e:

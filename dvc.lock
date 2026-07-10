@@ -5,14 +5,14 @@ stages:
     deps:
     - path: src/data/data_ingestion.py
       hash: md5
-      md5: e792c394778f30975b07e8c999492287
-      size: 7798
+      md5: cdea7cf7a726cfef17f5bcb62f0405fe
+      size: 7810
     params:
       params.yaml:
         data_ingestion.data_path: data/src
         data_ingestion.data_path_dest: data/raw
         data_ingestion.data_source: questdb
-        data_ingestion.end_date: '2026-06-26'
+        data_ingestion.end_date: '2026-06-30'
         data_ingestion.file_name: '{ticker}-{timeframe}-futures.parquet'
         data_ingestion.high_time_col: High
         data_ingestion.high_time_col_wavelet: Close_wavelet
@@ -28,40 +28,10 @@ stages:
         - 10
         data_ingestion.low_time_col: Low
         data_ingestion.low_time_col_wavelet: Close_wavelet
-        data_ingestion.start_date: '2023-04-03'
+        data_ingestion.start_date: '2024-07-01'
         data_ingestion.table_name: DUKASCOPY_{ticker}_OHLC_{timeframe}
         data_ingestion.ticker: DAX40
         data_ingestion.timeframe: 1m
-        data_ingestion.timeframe_minutes:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-        - 10
-        - 15
-        - 20
-        - 30
-        - 60
-        - 120
-        - 240
-        - 1440
-        data_ingestion.timeframe_scalers:
-        - 0.22
-        - 0.44
-        - 0.63
-        - 0.77
-        - 0.89
-        - 1
-        - 1.4
-        - 1.7
-        - 2
-        - 2.4
-        - 3.4
-        - 4.8
-        - 6.8
-        - 9.6
         data_ingestion.timeframes:
         - 10s
         - 1m
@@ -80,28 +50,28 @@ stages:
     outs:
     - path: data/raw
       hash: md5
-      md5: 99c5589a1570d2bdf57a2714827a05a6.dir
-      size: 32940233
+      md5: 727af31800fad4bc9c532231ec25307c.dir
+      size: 19310942
       nfiles: 3
   data_preprocessing:
     cmd: python src/data/data_preprocessing.py
     deps:
     - path: data/raw/data_ohlc_15m.csv
       hash: md5
-      md5: e79cab467b5fcc72b37ee2f2114c4441
-      size: 5751711
+      md5: c3629e9ce2bc1b7923e1614210eef614
+      size: 2660644
     - path: data/raw/data_ohlc_1h.csv
       hash: md5
-      md5: 9d56fb55c8511ce44458fe6fd9bbb9a1
-      size: 1482521
+      md5: 122a48907db5b57034a42acb76878bad
+      size: 685446
     - path: data/raw/data_ohlc_5m.csv
       hash: md5
-      md5: 36961e70b951ff9ca061a54d4afdb608
-      size: 25706001
+      md5: be80de65e5b0c76c959fa158618de339
+      size: 15964852
     - path: src/data/data_preprocessing.py
       hash: md5
-      md5: 4ff547e8426286e4f9e5ae91657816cc
-      size: 7235
+      md5: e2fd2469656225a1f8433c1088479d80
+      size: 6645
     params:
       params.yaml:
         data_preprocessing.data_path: data/raw
@@ -111,6 +81,7 @@ stages:
         data_preprocessing.indexes_higher:
         - 7
         - 10
+        data_preprocessing.local_timezone: Europe/Berlin
         data_preprocessing.timeframe_scalers:
         - 0.22
         - 0.44
@@ -144,28 +115,28 @@ stages:
     outs:
     - path: data/interim
       hash: md5
-      md5: c88cf2446bba90c012a76a2d2ecb7572.dir
-      size: 398384559
+      md5: f24e0ab3d38ee2187a827ee561941998.dir
+      size: 246614631
       nfiles: 5
   model_building:
     cmd: python src/model/model_building.py
     deps:
     - path: data/interim/data_static_features_15m.csv
       hash: md5
-      md5: 2d9993f1b22f0ef21abd12ec7125562e
-      size: 88083318
+      md5: d037e4cbacbfd00e89025ac3546cf4ac
+      size: 53726407
     - path: data/interim/data_static_features_1h.csv
       hash: md5
-      md5: a501228da2b42b1462918c642bb949d1
-      size: 22504927
+      md5: 041b39a7f036c094d5661c5105a234dc
+      size: 13697171
     - path: data/interim/data_static_features_5m.csv
       hash: md5
-      md5: 82fb9ca7ca863c45faa09eed122775fa
-      size: 287794235
+      md5: dced9f82dd06600375d1f36aa1c5d8fd
+      size: 179188942
     - path: src/model/model_building.py
       hash: md5
-      md5: 227fdaf46acda2780133bdf6aebc2cc6
-      size: 10896
+      md5: 99b9eb09e06a8a6cd06782d0e8c5bd33
+      size: 10275
     params:
       params.yaml:
         model_building.col_y:
@@ -238,13 +209,14 @@ stages:
         - short_pivot
         - atr
         - adx
+        model_building.local_timezone: Europe/Berlin
         model_building.model_name: xgboost_model_with_pca_v1
         model_building.model_params_name: 
           model_params_{timeframe}_v{version}.json
         model_building.models_path: data/models
-        model_building.n_trials: 400
+        model_building.n_trials: 1
         model_building.note: xgb-dax-pipeline with PCA
-        model_building.num_splits: 17
+        model_building.num_splits: 9
         model_building.timeframe: 5m
         model_building.timeframe_scalers:
         - 0.22
@@ -280,9 +252,9 @@ stages:
     outs:
     - path: data/models/model_params_5m_v1.json
       hash: md5
-      md5: 7eb93b1f0f4ae960001bc4d1ee763747
-      size: 1802
+      md5: 138ca29ad2b5a6d3d0ab7726808dc11c
+      size: 1789
     - path: data/models/optuna_trials.csv
       hash: md5
-      md5: a480b6d2d534a4fe17202ca16d6ade5b
-      size: 209116
+      md5: 2ece106dca313b50384cc07be3be35fb
+      size: 2174

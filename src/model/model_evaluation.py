@@ -8,11 +8,10 @@ import os
 # import seaborn as sns
 import json
 from datetime import date
-from mlflow.models import infer_signature
 from mlflow.tracking import MlflowClient
 
 from src.backtesting.optimization import objective
-from src.data_utils.utils import load_params, get_dates
+from src.data_utils.utils import get_dates
 from src.model.mlflow_utils import find_latest_experiment, load_model_params_from_experiment, save_model_params
 from src.model.model_building import load_data
 from dotenv import load_dotenv
@@ -26,7 +25,7 @@ logger.setLevel('DEBUG')
 console_handler = logging.StreamHandler()
 console_handler.setLevel('DEBUG')
 
-file_handler = logging.FileHandler('model_evaluation_errors.log')
+file_handler = logging.FileHandler('model_evaluation.log')
 file_handler.setLevel('ERROR')
 
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -82,15 +81,15 @@ logger.addHandler(file_handler)
 def main():
 
     # Load parameters from the root directory
-    params = dvc.api.params_show('params.yaml')
+    params = dvc.api.params_show('params.yaml')['model_building']
 
     # Load the preprocessed data from the interim directory
-    data = load_data(data_path=params['model_building']['data_path'], params=params)
+    data = load_data(data_path=params['data_path'], params=params)
     
-    cutoff_date = date(2025,1,2)
+    cutoff_date = date(2021,8,1)
     for d in data:
         data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
-    _, unique_weekdates = get_dates(data, params['model_building']['index_base'])
+    _, unique_weekdates = get_dates(data, params['index_base'])
 
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
@@ -99,7 +98,7 @@ def main():
 
     experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
     experiment_id = experiment.experiment_id
-    optimisation_score = objective(None, data, params['model_evaluation'], cutoff_date, unique_weekdates, experiment_id, model_params_override=model_params)
+    optimisation_score = objective(None, data, params, cutoff_date, unique_weekdates, experiment_id, model_params_override=model_params)
     print(f"Optimisation score: {optimisation_score}")
 
 
@@ -118,7 +117,7 @@ def main():
 
     # Save the trained model in the root directory
     # print("Saving model parameters to json...")
-    model_params_path = os.path.join(params['model_building']['models_path'], f"model_params_evaluation_{run_id}.json")
+    model_params_path = os.path.join(params['models_path'], f"model_params_evaluation_{run_id}.json")
     save_model_params(model_params=model_params, file_path=model_params_path, logger=logger)
 
     with mlflow.start_run(run_id=run_id) as run:

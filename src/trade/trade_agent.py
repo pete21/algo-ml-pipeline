@@ -18,10 +18,12 @@ from src.trade.model_inference_trade import main as model_inference_trade_main
 
 load_dotenv()
 EXECUTE_ORDER_THRESHOLD = 0.5
-ORDER_PRICE_SHIFT = 0.0002
+ORDER_PRICE_SHIFT = 0.0003
 
 INTERVAL_MINUTES = 5
 SCHEDULE_OFFSET_SECONDS = 5
+
+CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES = 11 # maximum lifetime of a pending order, then it is is cancelled by the trade agent
 
 TICKER = 'DAX40'
 ORDER_API_URL = os.getenv('ORDER_API_URL', 'http://localhost:8080/orders')
@@ -58,6 +60,24 @@ file_handler.setFormatter(formatter)
 
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
+
+
+def cancel_pending_order(order_id: int) -> bool:
+    """Cancel a pending order."""
+    url = f"{ORDER_API_URL}/{order_id}"
+    request = urllib.request.Request(
+        url,
+        method='DELETE',
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            body = response.read().decode('utf-8')
+            logger.info("Order %s cancelled: %s", order_id, body)
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode('utf-8')
+        logger.error("Order %s cancellation failed with status %s: %s", order_id, exc.code, error_body)
+        return False
+    return True
 
 
 def submit_limit_order(
@@ -117,7 +137,6 @@ def insert_db_marketbroker_order(
 
     Column	Value
     inference_id    0
-    signal_timestamp    DB default (CURRENT_TIMESTAMP)
     timeseries_datetime date_val
     ticker TICKER (DAX40)
     side    1 (buy) or -1 (sell)
@@ -126,6 +145,7 @@ def insert_db_marketbroker_order(
     tp    buy: price * (1 + tp) · sell: price * (1 - tp)
     sl    buy: price * (1 - sl) · sell: price * (1 + sl)
     status   1
+    created_at    DB default (CURRENT_TIMESTAMP)
 
     """
     price = float(result['Close'].iloc[idx])
@@ -205,7 +225,7 @@ def insert_db_marketbroker_order(
         except Exception as exc:
             logger.error("Error submitting limit order request to market API for prediction %s: %s", result.index[idx], exc)
             print(f"Error submitting limit order request to market API for prediction {result.index[idx]}: {exc}")
-            update_order_from_marketbroker_response(connection, inserted_id, 0, False, 'ERRORED', error={'info': str(exc)})
+            update_order_from_marketbroker_response(connection, inserted_id, 0, False, 'REJECTED', error={'info': str(exc)})
 
     else:
         print(f"Order could not be inserted into database for {result.index[idx]}")
@@ -274,8 +294,20 @@ def run_cycle() -> None:
         # Check if there are any open orders for the ticker
         open_orders = get_open_orders(mysql_connection, TICKER)
         if open_orders:
-            logger.info("Skipping order processing: There are existing open order(s): %s", open_orders)
-            print(f"Skipping order processing: There are existing open order(s): {open_orders}")
+
+            # TODO: Check if the pending orders are older than CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES minutes and cancel them if they are
+            pending_orders = [order for order in open_orders if order['status'] == 0]
+            for order in pending_orders:
+                if order['created_at'] < datetime.now(tz=timezone.utc) - timedelta(minutes=CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES):
+                    cancelled = cancel_pending_order(order['order_id'])
+                    if cancelled:
+                        update_order_from_marketbroker_response(mysql_connection, order['id'], 0, False, 'CANCELLED', error=None)
+                        logger.info("Cancelled pending order %s because it is older than %d minutes", order['order_id'], CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES)
+                    else:
+                        logger.error("Failed to cancel pending order %s", order['order_id'])
+
+            logger.info("Skipping order processing: There are pending or opened order(s): %s", open_orders)
+            print(f"Skipping order processing: There are pending or opened order(s): {open_orders}")
             return
 
         orders_inserted_ids = []

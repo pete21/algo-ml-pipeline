@@ -1,5 +1,4 @@
 import json
-from mlflow.models.signature import infer_signature
 import numpy as np
 from datetime import date
 import multiprocessing as mp
@@ -36,7 +35,11 @@ LOG_SPLITS_TABLE = {
     18: [ 1.0, 2.344,  3.656,  4.904,  6.088,  7.24 ,  8.328,  9.352, 10.376, 11.336, 12.232, 13.128, 13.96 , 14.76 , 15.56 , 16.296, 17.   ],
     19: [ 1.0, 2.36,  3.652,  4.91 ,  6.1  ,  7.256,  8.378,  9.432, 10.452, 11.438, 12.39 , 13.274, 14.158, 14.974, 15.79 , 16.538, 17.286, 18.   ],
     20: [ 1.0, 2.368,  3.664,  4.924,  6.148,  7.3  ,  8.416,  9.496, 10.54 , 11.548, 12.484, 13.42 , 14.32 , 15.184, 16.012, 16.804, 17.56 , 18.28 , 19.   ],
-    21: [ 1.0, 2.368,  3.66 ,  4.952,  6.168,  7.346,  8.448,  9.55 , 10.614, 11.64 , 12.59 , 13.54 , 14.452, 15.326, 16.2  , 16.998, 17.796, 18.556, 19.278, 20.   ]
+    21: [ 1.0, 2.368,  3.66 ,  4.952,  6.168,  7.346,  8.448,  9.55 , 10.614, 11.64 , 12.59 , 13.54 , 14.452, 15.326, 16.2  , 16.998, 17.796, 18.556, 19.278, 20.   ],
+    22: [ 1.0, 2.36,   3.68 ,  4.96 ,  6.16 ,  7.36 ,  8.52 ,  9.6 ,  10.68,  11.72,  12.72,  13.68,  14.6 ,  15.52,  16.36,  17.2 ,  18.  ,  18.8 ,  19.56,  20.28, 21.  ],
+    23: [ 1.0, 2.344,  3.688,  4.948,  6.208,  7.384,  8.56,   9.652, 10.744, 11.794, 12.802, 13.768, 14.734, 15.658, 16.54,  17.38,  18.22,  19.018, 19.816, 20.572, 21.286, 22.  ],
+    24: [ 1.0, 2.364,  3.684,  4.96,   6.192,  7.424,  8.568,  9.712, 10.812, 11.868, 12.88,  13.892, 14.86,  15.784, 16.664, 17.544, 18.424, 19.216, 20.052, 20.8,   21.548, 22.296, 23.  ],
+    25: [ 1.0, 2.38,   3.668,  4.956,  6.198,  7.44,   8.59,   9.74,  10.844, 11.902, 12.96,  13.972, 14.938, 15.904, 16.824, 17.698, 18.572, 19.446, 20.228, 21.056, 21.792, 22.574, 23.264, 24.  ],
     }
 
 
@@ -69,9 +72,9 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         mlflow.log_params(params)
 
         model_params = model_params_override or {
-            'n_estimators': trial.suggest_int('n_estimators', 350, 400),
-            'max_depth': trial.suggest_int('max_depth', 7, 8),
-            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.02),
+            'n_estimators': trial.suggest_int('n_estimators', 360, 400, step=5),
+            'max_depth': trial.suggest_int('max_depth', 7, 7),
+            'learning_rate': trial.suggest_float('learning_rate', 0.015, 0.02, step=0.001),
             'subsample': trial.suggest_float('subsample', 0.95, 0.95),
             'gamma':  trial.suggest_float('gamma', 0.95, 0.95),
             # 'feature_fraction':  trial.suggest_float('feature_fraction', 0.9, 1),
@@ -126,17 +129,17 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 10, 20),
             'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 3, 15),
             'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 10, 20),
-            'train_range_len': trial.suggest_int('train_range_len', 14, 18),
+            'train_range_len': trial.suggest_int('train_range_len', 15, 18),
             'test_range_len': trial.suggest_int('test_range_len', 4, 4),  #3,5
-            'hour_range_start': trial.suggest_int('hour_range_start', 4, 8),
+            'hour_range_start': trial.suggest_int('hour_range_start', 6*60, 10*60, step=15),
             # 'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
             'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
             'di_timeperiod': trial.suggest_int('di_timeperiod', 5, 15),
             'macd_slope_period': trial.suggest_int('macd_slope_period', 9, 9),
             'sl': trial.suggest_float('sl', 0.003, 0.004) if not params['evals_strategy'] else 0,
-            'tp': trial.suggest_float('tp', 0.002, 0.005) if not params['evals_strategy'] else trial.suggest_int('tp', 50, 150),
+            'tp': trial.suggest_float('tp', 0.002, 0.004) if not params['evals_strategy'] else trial.suggest_int('tp', 50, 150),
 
-            'atr_period': trial.suggest_int('atr_period', 6, 12),
+            'atr_period': trial.suggest_int('atr_period', 5, 10),
 
             'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 5, 15),
             'stochk_slope_period': trial.suggest_int('stochk_slope_period', 5, 15),
@@ -149,14 +152,14 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'ema_reversed_period': trial.suggest_int('ema_reversed_period', 5, 9),
             'threshold_long': trial.suggest_float('threshold_long', 0.8, 0.84),
             'threshold_short': trial.suggest_float('threshold_short', 0.15, 0.2),
-            'pred_ewm_span': trial.suggest_float('pred_ewm_span', 1, 2),
-            'pca_ichimoku': trial.suggest_categorical('pca_ichimoku', [True]),
-            'pca_kama': trial.suggest_categorical('pca_kama', [False]),
-            'weekday': trial.suggest_categorical('weekday', [0, 2, 4]),                     # 0: Monday, 2: Wednesday, 4: Friday
+            'pred_ewm_span': trial.suggest_float('pred_ewm_span', 1, 2, step=0.1),
+            'pca_ichimoku': trial.suggest_categorical('pca_ichimoku', [True, False]),
+            'pca_kama': trial.suggest_categorical('pca_kama', [False, True]),
+            'weekday': trial.suggest_categorical('weekday', [2]),                     # 0: Monday, 2: Wednesday, 4: Friday
         }
 
         if not model_params_override:
-            model_params['hour_range_stop'] = trial.suggest_int('hour_range_stop', model_params['hour_range_start'] + 10, model_params['hour_range_start'] + 10)
+            model_params['hour_range_stop'] = trial.suggest_int('hour_range_stop', model_params['hour_range_start'] + 10*60, model_params['hour_range_start'] + 10*60)
 
             if params['evals_strategy']:
                 model_params['sl'] = trial.suggest_int('sl', model_params['tp'] // 1.5, model_params['tp'] // 1.5)
@@ -172,12 +175,8 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             p[i] = model_params
         X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], cutoff_date, lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
         y=y+1
-
-        #X = X.loc[(X.index.hour>=model_params['hour_range_start']) & (X.index.hour<=model_params['hour_range_stop'])]
-
-        #print(lag_f.get_feature_names_out())
-
-        #ml_data.to_csv('ml_data1.csv')
+        X.to_csv('X.csv', index=True, header=True)
+        y.to_csv('y.csv', index=True, header=True)
         num_splits = params['num_splits']
 
         # Split the dataset to test and train sets
@@ -200,20 +199,26 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         mlflow.log_param('indexes_higher', indexes_higher)
 
         tuples = []
-        for idx,i in enumerate(train_splits):
+        for i in train_splits:
 
             train_split = unique_dates[i]
             train_start_idx = unique_dates[max(i-model_params['train_range_len']*5, 1)]
             test_end_idx = unique_dates[min(i+model_params['test_range_len']*5, len(unique_dates)-5)]
 
-            X_train, X_test = X.loc[(X.index.date>train_start_idx) & (X.index.date<=train_split)], X.loc[(X.index.date>train_split) & (X.index.date<=test_end_idx)]
-            y_train, y_test = y.loc[(X.index.date>train_start_idx) & (X.index.date<=train_split)], y.loc[(X.index.date>train_split) & (X.index.date<=test_end_idx)]
+            X_train, X_test = X.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split)], X.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
+            y_train, y_test = y.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split)], y.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
             print(train_start_idx, train_split, test_end_idx)
-            data_target = X_test.loc[:,['Open','High','Low','Close']]
+            data_target = X_test.loc[:,['Open','High','Low','Close','minute_of_day']]
             data_target['sl']=model_params['sl']
             data_target['tp']=model_params['tp']
-            data_target['DaytradingExit'] = ((data_target.index.date != data_target.index.to_series().shift(periods=-1).dt.date) | (data_target.index.date != data_target.index.to_series().shift(periods=-2).dt.date))
+            
+            # data_target['DaytradingExit'] = ((data_target.index.date != data_target.index.to_series().shift(periods=-1).dt.date) | (data_target.index.date != data_target.index.to_series().shift(periods=-2).dt.date))
+            data_target['DaytradingExit'] = (data_target['minute_of_day'] >= 23*60-5) & (data_target['minute_of_day'] <= 23*60)
 
+            X_train=X_train.drop(columns=['minute_of_day', 'local_date'])
+            X_test=X_test.drop(columns=['minute_of_day', 'local_date'])
+            # X_train.to_csv('X_train_'+str(i)+'.csv')
+            # y_train.to_csv('y_train_'+str(i)+'.csv')
             #data_target = data_target.join(ml_data['atr']).ffill().bfill()
             tuples.append((X_train, X_test, y_train, y_test, data_target, model_params, 1))         # exponential_growth(1, 0.02, num_splits-idx-1)
 

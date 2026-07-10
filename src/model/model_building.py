@@ -3,25 +3,15 @@ import logging
 import optuna
 import pandas as pd
 import os
-import json
-from src.data_utils.utils import load_params, get_dates
+import dvc.api
+import pytz
+from src.data_utils.utils import get_dates
 from src.backtesting.optimization import objective
 from datetime import date, datetime
 from dotenv import load_dotenv
 
 from src.model.mlflow_utils import create_mlflow_experiment, save_model_params
 
-# from optuna.visualization import plot_param_importances, plot_contour, plot_slice
-# from optuna.visualization import plot_contour
-# from optuna.visualization import plot_edf
-# from optuna.visualization import plot_intermediate_values
-# from optuna.visualization import plot_optimization_history
-# from optuna.visualization import plot_parallel_coordinate
-# from optuna.visualization import plot_param_importances
-# from optuna.visualization import plot_rank
-# from optuna.visualization import plot_slice
-# from optuna.visualization import plot_timeline
-# from optuna.importance import get_param_importances
 
 load_dotenv()
 
@@ -33,7 +23,7 @@ logger.setLevel('DEBUG')
 console_handler = logging.StreamHandler()
 console_handler.setLevel('DEBUG')
 
-file_handler = logging.FileHandler('model_building_errors.log')
+file_handler = logging.FileHandler('model_building.log')
 file_handler.setLevel('ERROR')
 
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -46,23 +36,30 @@ logger.addHandler(file_handler)
 
 def load_data(data_path: str, params: dict) -> dict:
     """Load data from a CSV file."""
+    local_timezone = pytz.timezone(params['local_timezone'])
+
     try:
         data = {}
-        print(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][params['model_building']['index_base']])))
-        print("Loading data for index base: ", params['model_building']['index_base'])
-        data[params['model_building']['index_base']] = pd.read_csv(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][params['model_building']['index_base']])), parse_dates=True, index_col='date')
+        print(os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][params['index_base']])))
+        print("Loading data for index base: ", params['index_base'])
+        data[params['index_base']] = pd.read_csv(os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][params['index_base']])), parse_dates=True, index_col='date')
         # data[params['data_preprocessing']['index_base']]["high_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["high_time"])
         # data[params['data_preprocessing']['index_base']]["low_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["low_time"])
-        
-        for i in params['model_building']['indexes_higher']:
-            print(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][i])))
+        data[params['index_base']]['local_date'] = data[params['index_base']].index.tz_localize('UTC').tz_convert(local_timezone)
+        data[params['index_base']]["date_merge"] = data[params['index_base']].index
+        print(data[params['index_base']].head())
+
+        for i in params['indexes_higher']:
+            print(os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][i])))
             print("Loading data for index: ", i)
-            data[i] = pd.read_csv(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][i])), parse_dates=True, index_col='date')
-        
-        data[params['model_building']['index_base']]["date_merge"] = data[params['model_building']['index_base']].index
-        for i in params['model_building']['indexes_higher']:
-            data[i]["date_merge"] = data[i].index
-        #     data[i]["date_merge"] = pd.to_datetime(data[i]["date_merge"])
+            data[i] = pd.read_csv(os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][i])), parse_dates=True, index_col='date')
+            # data[i]['local_date'] = data[i].index.tz_localize('UTC').tz_convert(local_timezone)
+            data[i]["date_merge"] = (
+                data[i].index
+                + pd.to_timedelta(params['timeframe_minutes'][i], "m")
+                - pd.to_timedelta(params['timeframe_minutes'][params['index_base']], "m")
+            )
+            print(data[i].head())
 
         logger.debug('Data loaded from %s', data_path)
         return data
@@ -159,22 +156,23 @@ def main():
     print("Starting model building process...")
     try:
         # Get root directory and resolve the path for params.yaml
-        root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
+        # root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
 
         # Load parameters from the root directory
-        params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
+        # params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
+        # Load parameters from the params.yaml in the root directory
+        params = dvc.api.params_show('params.yaml')['model_building']
+        print(f"Params: {params}")
         # model_params = load_json_params(os.path.join(root_dir, 'model_params.json'), logger=logger)
 
         # Load the preprocessed data from the interim directory
-        data = load_data(data_path=params['model_building']['data_path'], params=params)
+        data = load_data(data_path=params['data_path'], params=params)
         
-        cutoff_date = date(2024,6,1)
-        for d in data:
-            data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
-        unique_dates, unique_weekdates = get_dates(data, params['model_building']['index_base'])
+        unique_dates, unique_weekdates = get_dates(data, params['index_base'])
+        cutoff_date = data[params['index_base']].index.date.min()+pd.Timedelta(21, "D")
 
-        experiment_name = f'xgb-dax-pipeline-v{params["model_building"]["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
-        if params['model_building']['evals_strategy']:
+        experiment_name = f'xgb-dax-pipeline-v{params["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+        if params['evals_strategy']:
             experiment_name += '-evals'
         else:
             experiment_name += '-trading'
@@ -185,7 +183,7 @@ def main():
         # experiment = mlflow.get_experiment(experiment_id=experiment_id)
 
         study = optuna.create_study(direction='maximize')
-        study.optimize(lambda trial: objective(trial, data, params['model_building'], cutoff_date, unique_weekdates, experiment_id), n_trials=params['model_building']['n_trials'])
+        study.optimize(lambda trial: objective(trial, data, params, cutoff_date, unique_weekdates, experiment_id), n_trials=params['n_trials'])
         print("Best trial number: ", study.best_trial.number)
         print("Best parameters: ", study.best_params)
         print("Best score:", study.best_value)
@@ -193,16 +191,16 @@ def main():
 
         # Save the trained model in the root directory
         print("Saving model parameters to json...")
-        model_params_path = os.path.join(params['model_building']['models_path'], params['model_building']['model_params_name'].format(timeframe=params['model_building']['timeframe'], version=params['model_building']['version']))
+        model_params_path = os.path.join(params['models_path'], params['model_params_name'].format(timeframe=params['timeframe'], version=params['version']))
         save_model_params(model_params=study.best_params, file_path=model_params_path, logger=logger)
 
 
         print("Saving study trials to csv...")
-        optuna_trials_path = os.path.join(params['model_building']['models_path'],f"{experiment_name}_trials.csv")
+        optuna_trials_path = os.path.join(params['models_path'],f"{experiment_name}_trials.csv")
         study_trials = study.trials_dataframe().sort_values(by=['value'], ascending=False)
         print("Study trials: ", study_trials.head())
         study_trials.to_csv(optuna_trials_path, index=False)
-        study_trials.to_csv(os.path.join(params['model_building']['models_path'],"optuna_trials.csv"), index=False)
+        study_trials.to_csv(os.path.join(params['models_path'],"optuna_trials.csv"), index=False)
 
         print(f"Searching for run_id with run name: Trial_{study.best_trial.number}")
         # get run_id with run name 
@@ -212,10 +210,10 @@ def main():
         tags = {
             "project_name": "xgb-dax-pipeline",
             "stage": "building",
-            "mlflow.note.content": params['model_building']['note'],
+            "mlflow.note.content": params['note'],
             "optimizer": "optuna",
             "model_family": "xgboost",
-            "model_name": params['model_building']['model_name'],
+            "model_name": params['model_name'],
             "best_trial_number": study.best_trial.number,
             "best_run_name": f"Trial_{study.best_trial.number}",
             "best_run_id": run_id,
@@ -224,7 +222,7 @@ def main():
         mlflow.set_experiment_tags(tags)
 
         with mlflow.start_run(run_id=run_id) as run:
-            mlflow.log_artifact(local_path=os.path.join(params['model_building']['models_path'],"optuna_trials.csv"), artifact_path='optuna_trials')
+            mlflow.log_artifact(local_path=os.path.join(params['models_path'],"optuna_trials.csv"), artifact_path='optuna_trials')
             mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
             mlflow.log_metric('best', True)
     

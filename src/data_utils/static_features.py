@@ -11,13 +11,21 @@ def sliding_elementwise_mult(values: np.ndarray, weights: np.ndarray, scaler: fl
     """Elementwise multiply window values by weights; return sum of products."""
     return float(np.dot(values, weights)/np.mean(values)*scaler)
 
-def static_features(df: pd.DataFrame, unique_weekdates: list, scaler: float, high_col: str="high", low_col: str="low", open_col: str="open", close_col: str="close") -> pd.DataFrame:
+def static_features(df: pd.DataFrame, scaler: float, high_col: str="high", low_col: str="low", open_col: str="open", close_col: str="close") -> pd.DataFrame:
     print(datetime.now().strftime('%H:%M:%S'))
 
-    df.loc[:,'hour_sin'] = np.sin((df.index.hour * 60 + df.index.minute) * np.pi / 720)
-    df.loc[:,'hour_cos'] = np.cos((df.index.hour * 60 + df.index.minute) * np.pi / 720)
-    df.loc[:,'dow_sin'] = np.sin(2 * np.pi * df.index.dayofweek / 7)
-    df.loc[:,'dow_cos'] = np.cos(2 * np.pi * df.index.dayofweek / 7)
+    # df.loc[:,'hour_sin'] = np.sin((df.index.hour * 60 + df.index.minute) * np.pi / 720)
+    # df.loc[:,'hour_cos'] = np.cos((df.index.hour * 60 + df.index.minute) * np.pi / 720)
+    # df.loc[:,'dow_sin'] = np.sin(2 * np.pi * df.index.dayofweek / 7)
+    # df.loc[:,'dow_cos'] = np.cos(2 * np.pi * df.index.dayofweek / 7)
+
+    df.loc[:,'minute_of_day'] = df['local_date'].dt.hour * 60 + df['local_date'].dt.minute
+
+    df.loc[:,'hour_sin'] = np.sin(df['minute_of_day'] * np.pi / 720)
+    df.loc[:,'hour_cos'] = np.cos(df['minute_of_day'] * np.pi / 720)
+    df.loc[:,'dow_sin'] = np.sin(2 * np.pi * df['local_date'].dt.dayofweek / 7)
+    df.loc[:,'dow_cos'] = np.cos(2 * np.pi * df['local_date'].dt.dayofweek / 7)
+
     # df.loc[:,'day_of_week'] = df.index.dayofweek / 2 - 1
 
     # Heiken-ashi
@@ -84,7 +92,7 @@ def static_features(df: pd.DataFrame, unique_weekdates: list, scaler: float, hig
     df.loc[:,'close_wavelet_rolling'] = df['Close'].rolling(window=10, min_periods=10).apply(wavelet_denoising_rolling, raw=True, args=('db6', 8, 7, None))
 
     df.loc[:,"abs_log_ret_1"] = np.abs(df["log_ret_1"])
-    df.loc[:,"tail_index_1"] = math.tail_index(df=df, col="abs_log_ret_1", window_size=24, k_ratio=0.10).replace([np.inf], np.nan).ffill()
+    df.loc[:,"tail_index_1"] = np.log(math.tail_index(df=df, col="abs_log_ret_1", window_size=24, k_ratio=0.10).replace([np.inf], np.nan).ffill())
 
     df.loc[:,'close_regr_entropy'] = math.sample_entropy(df=df, col='Close', window_size=48)-1
     df.loc[:,'permutation_entropy'] = math.permutation_entropy(df=df, col="Close", window_size=48, order=5)-0.5
