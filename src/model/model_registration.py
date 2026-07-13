@@ -37,18 +37,16 @@ logger.addHandler(file_handler)
 
 def main():
 
-    # Get root directory and resolve the path for params.yaml
-    params = dvc.api.params_show('params.yaml')
-
     # Load parameters from the root directory
+    params = dvc.api.params_show('params.yaml')['model_building']
 
     # Load the preprocessed data from the interim directory
-    data = load_data(data_path=params['model_building']['data_path'], params=params)
+    data = load_data(data_path=params['data_path'], params=params)
     
     cutoff_date = datetime.today().date() - pd.Timedelta(days=730)
     for d in data:
         data[d] = data[d].loc[data[d].index.date>=cutoff_date]
-    _, unique_weekdates = get_dates(data, params['model_building']['index_base'])
+    _, unique_weekdates = get_dates(data, params['index_base'])
 
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
@@ -62,7 +60,7 @@ def main():
 
     experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
     experiment_id = experiment.experiment_id
-    registered_model_name = train_register_model(data=data, params=params['model_registration'], unique_weekdates=unique_weekdates, train_split_index=train_split_index, experiment_id=experiment_id, model_params=model_params)
+    registered_model_name = train_register_model(data=data, params=params, unique_weekdates=unique_weekdates, train_split_index=train_split_index, experiment_id=experiment_id, model_params=model_params)
     print(f"Registered model name: {registered_model_name}")
 
     client = mlflow.MlflowClient()

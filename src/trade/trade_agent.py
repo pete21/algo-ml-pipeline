@@ -3,8 +3,7 @@ import logging
 import threading
 import time
 import json
-import urllib.error
-import urllib.request
+import requests
 from datetime import datetime, timedelta, timezone
 
 import mysql.connector
@@ -65,20 +64,14 @@ logger.addHandler(file_handler)
 def cancel_pending_order(order_id: int) -> bool:
     """Cancel a pending order."""
     url = f"{ORDER_API_URL}/{order_id}"
-    request = urllib.request.Request(
-        url,
-        method='DELETE',
-    )
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            body = response.read().decode('utf-8')
-            logger.info("Order %s cancelled: %s", order_id, body)
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode('utf-8')
-        logger.error("Order %s cancellation failed with status %s: %s", order_id, exc.code, error_body)
+        response = requests.delete(
+            url,
+        )
+        return response.status_code == 200
+    except requests.exceptions.RequestException as exc:
+        logger.error("Order %s cancellation failed: %s", order_id, exc)
         return False
-    return True
-
 
 def submit_limit_order(
     ticker: str,
@@ -108,22 +101,16 @@ def submit_limit_order(
         'trailingPoint': trailing_point,
     }
     print(payload)
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json'},
-        method='POST',
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            body = response.read().decode('utf-8')
-            return json.loads(body) if body else {}
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode('utf-8')
-        raise RuntimeError(
-            f"Limit order request failed with status {exc.code}: {error_body}"
-        ) from exc
 
+    try:
+        response = requests.post(
+            url,
+            json=payload
+        )
+        return response.json()
+    except requests.exceptions.RequestException as exc:
+        logger.error("Limit order request failed: %s", exc)
+        raise
 
 
 def insert_db_marketbroker_order(
@@ -291,6 +278,7 @@ def run_cycle() -> None:
     try:
         inserted = insert_predictions(mysql_connection, result.y_pred, TICKER, registered_model_name, model_version, logger)
 
+
         # Check if there are any open orders for the ticker
         open_orders = get_open_orders(mysql_connection, TICKER)
         if open_orders:
@@ -310,21 +298,21 @@ def run_cycle() -> None:
             print(f"Skipping order processing: There are pending or opened order(s): {open_orders}")
             return
 
-        orders_inserted_ids = []
-        # for idx, inserted_id in enumerate(inserted):
-
         inserted_id = inserted[-1]
         idx = -1
-        if inserted_id is not None:
+        if inserted_id is None:
+            logger.warning("No predictions inserted.")
+            return
 
-            if abs(result.y_pred.iloc[idx]) > EXECUTE_ORDER_THRESHOLD and result.index[idx].tz_localize(timezone.utc) < datetime.now(tz=timezone.utc) - timedelta(minutes=10):
-                print(f"Skipping order insertion for {result.index[idx]} because it is older than 5 minutes")
-                logger.warning("Skipping order insertion for %s because it is older than 5 minutes", result.index[idx])
-            else:
-                if result.y_pred.iloc[idx] > EXECUTE_ORDER_THRESHOLD:
-                    orders_inserted_ids.append(insert_db_marketbroker_order(mysql_connection, result, idx, 'buy', TICKER))
-                elif result.y_pred.iloc[idx] < -EXECUTE_ORDER_THRESHOLD:
-                    orders_inserted_ids.append(insert_db_marketbroker_order(mysql_connection, result, idx, 'sell', TICKER))
+        orders_inserted_ids = []
+        if abs(result.y_pred.iloc[idx]) > EXECUTE_ORDER_THRESHOLD and result.index[idx].tz_localize(timezone.utc) < datetime.now(tz=timezone.utc) - timedelta(minutes=10):
+            print(f"Skipping order insertion for {result.index[idx]} because it is older than 5 minutes")
+            logger.warning("Skipping order insertion for %s because it is older than 5 minutes", result.index[idx])
+        else:
+            if result.y_pred.iloc[idx] > EXECUTE_ORDER_THRESHOLD:
+                orders_inserted_ids.append(insert_db_marketbroker_order(mysql_connection, result, idx, 'buy', TICKER))
+            elif result.y_pred.iloc[idx] < -EXECUTE_ORDER_THRESHOLD:
+                orders_inserted_ids.append(insert_db_marketbroker_order(mysql_connection, result, idx, 'sell', TICKER))
 
         if len(orders_inserted_ids) > 0:
             print(f"Inserted {len(orders_inserted_ids)} new rows into orders")

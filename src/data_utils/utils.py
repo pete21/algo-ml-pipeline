@@ -75,7 +75,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
     # ml_data[index_b].isnull().sum().to_csv('nulls.csv')
 
     ml_data[index_b] = lag_f.fit_transform(ml_data[index_b])
-    ml_data[index_b] = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop'])]
+    # ml_data[index_b] = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop'])]          # DATA SHOULD NOT BE TRIMMED HERE
     # print(ml_data[index_b].columns.values)
 
     for i in indexes_h:
@@ -115,7 +115,9 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
             if x not in ['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', "local_date", "minute_of_day"]:          # local_date and minute_of_day are excluded because they are not lag features, but are allowed to be in the X_columns, removed before training
                 X_columns.append(f"{x}_{timeframes[i]}")
 
-    dates = np.unique(ml_data[index_b]['local_date'].dt.date)
+    pca_data = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']-60) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop']+120)]  # pca slice - 60 minutes before and after the hour range
+    dates = np.unique(pca_data['local_date'].dt.date)
+
 # PCA
     # print('log_ret_ha_short_pca')                      # ['log_ret_ha_short_pca1','log_ret_ha_short_pca2']
     # cols = [x for x in X_columns if x.startswith("ret_ha_log") and (x[-1].isdigit() or x.endswith("15m"))]
@@ -137,7 +139,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
         print('ichimoku_short_pca')
         cols = [x for x in X_columns if (x.startswith("tenkan_sen") or x.startswith("kijun_sen")) and not(x.endswith("1h"))]
         # print('ichimoku_short_pca cols: ', cols)
-        pca_res = calc_kernel_pca(ml_data[index_b], dates[1:], 10, cols, ['ichimoku_short_pca1','ichimoku_short_pca2'])
+        pca_res = calc_kernel_pca(pca_data, dates[1:], 5, cols, ['ichimoku_short_pca1','ichimoku_short_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
         X_columns.append('ichimoku_short_pca1')
         X_columns.append('ichimoku_short_pca2')
@@ -145,7 +147,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
         print('ichimoku_long_pca')
         cols = [x for x in X_columns if (x.startswith("tenkan_sen") or x.startswith("kijun_sen")) and (x.endswith("1h"))]
         # print('ichimoku_long_pca cols: ', cols)
-        pca_res = calc_kernel_pca(ml_data[index_b], dates[1:], 10, cols, ['ichimoku_long_pca1','ichimoku_long_pca2'])
+        pca_res = calc_kernel_pca(pca_data, dates[1:], 5, cols, ['ichimoku_long_pca1','ichimoku_long_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
         X_columns.append('ichimoku_long_pca1')
         X_columns.append('ichimoku_long_pca2')
@@ -163,7 +165,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
     if parameters['pca_kama']:
         print('kama_short_pca')
         cols = [x for x in X_columns if (x.startswith("kama_trend_slow_diff") or x.startswith("kama_trend_fast_diff")) and not (x.endswith("1h"))]
-        pca_res = calc_kernel_pca(ml_data[index_b], dates[1:], 10, cols, ['kama_short_pca1','kama_short_pca2'])
+        pca_res = calc_kernel_pca(pca_data, dates[1:], 5, cols, ['kama_short_pca1','kama_short_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
         X_columns.append('kama_short_pca1')
         X_columns.append('kama_short_pca2')
@@ -171,7 +173,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 
         print('kama_long_pca')
         cols = [x for x in X_columns if (x.startswith("kama_trend_slow_diff") or x.startswith("kama_trend_fast_diff")) and (x.endswith("1h"))]
-        pca_res = calc_kernel_pca(ml_data[index_b], dates[1:], 10, cols, ['kama_long_pca1','kama_long_pca2'])
+        pca_res = calc_kernel_pca(pca_data, dates[1:], 5, cols, ['kama_long_pca1','kama_long_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
         X_columns.append('kama_long_pca1')
         X_columns.append('kama_long_pca2')

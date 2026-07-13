@@ -1,11 +1,10 @@
 import logging
-import json
 import os
-import urllib.error
-import urllib.request
+import requests
 import dvc.api
 import pandas as pd
 import numpy as np
+import pytz
 from src.data_utils.utils import getXy
 from datetime import date, datetime
 from dotenv import load_dotenv
@@ -28,10 +27,17 @@ def load_data(data_path: str, params: dict, logger: logging.Logger) -> dict:
             print("Loading data from: ", filename)
             data[i] = pd.read_csv(filename, parse_dates=True, index_col='date')
         
-        for i in params['model_building']['indexes_higher']:
-            data[i]["date_merge"] = pd.to_datetime(data[i]["date_merge"])
-        
+        local_timezone = pytz.timezone(params['model_building']['local_timezone'])
+        data[params['model_building']['index_base']]['local_date'] = data[params['model_building']['index_base']].index.tz_localize('UTC').tz_convert(local_timezone)
+
+
         data[params['model_building']['index_base']]["date_merge"] = data[params['model_building']['index_base']].index
+        for i in params['model_building']['indexes_higher']:
+            data[i]["date_merge"] = (
+                data[i].index
+                + pd.to_timedelta(params['model_building']['timeframe_minutes'][i], "m")
+                - pd.to_timedelta(params['model_building']['timeframe_minutes'][params['model_building']['index_base']], "m")
+            )
 
         logger.debug('Data loaded from %s', data_path)
         return data
@@ -49,35 +55,25 @@ def request_predictions(X: pd.DataFrame, url: str, n_rows: int, logger: logging.
         "columns": sample.columns.tolist(),
         "data": sample.values.tolist(),
     }
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8")
-        logger.error('Prediction request failed with status %s: %s', exc.code, error_body)
-        raise RuntimeError(
-            f"Prediction request failed with status {exc.code}: {error_body}"
-        ) from exc
+        response = requests.post(
+            url,
+            json=payload
+        )
+        return response.json()
+    except requests.exceptions.RequestException as exc:
+        logger.error("Prediction request failed: %s", exc)
+        raise
 
 
 def fetch_model_params(url: str, logger: logging.Logger) -> dict:
     """Fetch model_params from the model serving endpoint."""
-    request = urllib.request.Request(url, method="GET")
+    response = requests.get(url)
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8")
-        logger.error('Model params request failed with status %s: %s', exc.code, error_body)
-        raise RuntimeError(
-            f"Model params request failed with status {exc.code}: {error_body}"
-        ) from exc
+        return response.json()
+    except requests.exceptions.RequestException as exc:
+        logger.error("Model params request failed: %s", exc)
+        raise
 
 
 def main(logger: logging.Logger) -> pd.DataFrame | None:
@@ -99,16 +95,14 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         model_params = fetch_model_params(url=MODEL_PARAMS_URL, logger=logger)
         print(f"Loaded model params: {model_params}")
         model_params['hour_range_start'] = 2*60
-        model_params['hour_range_stop'] = 20*60
+        model_params['hour_range_stop'] = 23*60
 
         p={}
         for i in params['model_building']['indexes_higher']:
             p[i] = model_params
-        
-        print(data[params['model_building']['index_base']].tail())
-        print(data[params['model_building']['indexes_higher'][0]].tail())
-        print(data[params['model_building']['indexes_higher'][1]].tail())
+            print(data[i].tail())
 
+        
         X, _, columns = getXy(data,
         params['model_building']['index_base'],
         params['model_building']['indexes_higher'],
@@ -122,6 +116,8 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         params['model_building']['lags'],
         col_open="Open", col_high="High", col_low="Low", col_close="Close"
         )
+        X.drop(columns=['local_date'], inplace=True)
+
         # X.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'X.csv'), index=True)
         print(X.tail())
         # print(y.head())

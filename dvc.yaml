@@ -117,15 +117,16 @@ stages:
     - ${model_building.data_path}/data_static_features_1h.csv
     - src/model/model_registration.py
     params:
-    - model_registration.models_path
-    - model_registration.index_base
-    - model_registration.indexes_higher
-    - model_registration.timeframes
-    - model_registration.timeframe_scalers
-    - model_registration.file_name
-    - model_registration.list_X
-    - model_registration.col_y
-    - model_registration.lags
+    - model_evaluation.dummy
+    # - model_registration.models_path
+    # - model_registration.index_base
+    # - model_registration.indexes_higher
+    # - model_registration.timeframes
+    # - model_registration.timeframe_scalers
+    # - model_registration.file_name
+    # - model_registration.list_X
+    # - model_registration.col_y
+    # - model_registration.lags
 
 
   model_analysis:

@@ -69,7 +69,7 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
         y=y_train
     )
     dtrain_gpu = DMatrix(X_train, label=y_train, weight=sample_weights)
-    dtest_gpu = DMatrix(X_test, label=y_test)
+    dtest_gpu = DMatrix(X_test)
     # print("dtrain_gpu: ", dtrain_gpu.shape)
     # print("dtest_gpu: ", dtest_gpu.shape)
     # print("sample_weights: ", sample_weights.shape)
@@ -92,18 +92,19 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
 
     print("Predicting...")
     y_pred = model_gpu.predict(dtest_gpu)
+    # print("X_test: ", X_test)
     # print("y_pred: ", y_pred)
     # print("Predicted.")
     # print("Creating y_series...")
-    y_pred_expected = np.matmul(y_pred,np.array([[-1],[0],[1]]))
+    y_pred_expected = np.matmul(y_pred, np.array([[-1],[0],[1]]))
+    # print("y_pred_expected: ", y_pred_expected)
     # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
     # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=params['pred_avg_period'], min_periods=1).mean()
     y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
-    # print("y_series created.")
     print("Joining y_series to data_target...")
-    data_target = data_target.join(y_series)
-    # print("data_target joined.")
+    data_target = data_target.join(y_series, how='left')
+
     print("Backtesting...")
     # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
 
@@ -256,15 +257,15 @@ def do_backtest_Strategy2_evals(X_train, X_test, y_train, y_test, data_target, p
     # print("y_pred: ", y_pred)
     # print("Predicted.")
     # print("Creating y_series...")
-    y_pred_expected = np.matmul(y_pred,np.array([[-1],[0],[1]]))
+    y_pred_expected = np.matmul(y_pred, np.array([[-1],[0],[1]]))
     # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
     # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=params['pred_avg_period'], min_periods=1).mean()
     y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
-    # print("y_series created.")
+
     print("Joining y_series to data_target...")
-    data_target = data_target.join(y_series)
-    # print("data_target joined.")
+    data_target = data_target.join(y_series, how='left')
+
     print("Backtesting...")
     # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
 

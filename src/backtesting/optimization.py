@@ -72,7 +72,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         mlflow.log_params(params)
 
         model_params = model_params_override or {
-            'n_estimators': trial.suggest_int('n_estimators', 360, 400, step=5),
+            'n_estimators': trial.suggest_int('n_estimators', 380, 400, step=5),
             'max_depth': trial.suggest_int('max_depth', 7, 7),
             'learning_rate': trial.suggest_float('learning_rate', 0.015, 0.02, step=0.001),
             'subsample': trial.suggest_float('subsample', 0.95, 0.95),
@@ -80,86 +80,86 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             # 'feature_fraction':  trial.suggest_float('feature_fraction', 0.9, 1),
             # 'num_leaves':  trial.suggest_int('num_leaves', 10, 200),
 
-            'sma1_period': trial.suggest_int('sma1_period', 5, 16),
+            'sma1_period': trial.suggest_int('sma1_period', 5, 15),
             'sma2_period': trial.suggest_int('sma2_period', 70, 100), 
             'bb_periods': trial.suggest_int('bb_periods', 30, 55),
-            'bb_nbdev': trial.suggest_float('bb_nbdev', 2, 2.4),
+            'bb_nbdev': trial.suggest_float('bb_nbdev', 2, 2.25),
             'ema1_period': trial.suggest_int('ema1_period', 5, 10),
-            'ema2_period': trial.suggest_int('ema2_period', 20, 40),
-            'sar_acc': trial.suggest_float('sar_acc', 0.2, 0.5), 
-            'sar_max': trial.suggest_float('sar_max', 0.1, 1.5), 
+            'ema2_period': trial.suggest_int('ema2_period', 15, 35),
+            'sar_acc': trial.suggest_float('sar_acc', 0.3, 0.6), 
+            'sar_max': trial.suggest_float('sar_max', 0.4, 1), 
             'midprice_window': trial.suggest_int('midprice_window', 2, 2), # 2,30
-            'l1_fast': trial.suggest_int('l1_fast', 5, 20), # 15,3,10
-            'l2_fast': trial.suggest_int('l2_fast', 2, 5), 
-            'l3_fast': trial.suggest_int('l3_fast', 5, 15), 
-            'l1_slow': trial.suggest_int('l1_slow', 20, 40), 
+            'l1_fast': trial.suggest_int('l1_fast', 4, 10), # 15,3,10
+            'l2_fast': trial.suggest_int('l2_fast', 3, 5), 
+            'l3_fast': trial.suggest_int('l3_fast', 10, 20), 
+            'l1_slow': trial.suggest_int('l1_slow', 25, 40), 
             'l2_slow': trial.suggest_int('l2_slow', 4, 8),
-            'l3_slow': trial.suggest_int('l3_slow', 15, 25),
+            'l3_slow': trial.suggest_int('l3_slow', 20, 30),
             'kama_trend_period': trial.suggest_int('kama_trend_period', 15, 35),
 
             'ha_candle_period': trial.suggest_int('ha_candle_period', 20, 40), 
-            'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 10, 30), 
-            'displacement_strength_period': trial.suggest_int('displacement_strength_period', 15, 30), 
-            'displacement_strength': trial.suggest_float('displacement_strength', 1.1, 1.8),
-            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 10, 80), 
+            'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 20, 35), 
+            'displacement_strength_period': trial.suggest_int('displacement_strength_period', 20, 35), 
+            'displacement_strength': trial.suggest_float('displacement_strength', 1.2, 1.8),
+            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 10, 50), 
             #    'displacement_sma_period': trial.suggest_int('displacement_sma_period', 2, 30), 
-            'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 8, 18),
+            'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 5, 10),
 
             'gap_lookback': trial.suggest_int('gap_lookback', 2, 7),
-            'gap_hull_period': trial.suggest_int('gap_hull_period', 4, 30),             # minimum 4
+            'gap_hull_period': trial.suggest_int('gap_hull_period', 4, 15),             # minimum 4
             'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 3, 15),
 
-            'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.002, 0.005),
-            'tenkan_window': trial.suggest_int('tenkan_window', 3, 10), 
-            'kijun_window': trial.suggest_int('kijun_window', 40, 80), 
-            'cci_timeperiods': trial.suggest_int('cci_timeperiods', 15, 30),
+            'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.003, 0.005),
+            'tenkan_window': trial.suggest_int('tenkan_window', 6, 12), 
+            'kijun_window': trial.suggest_int('kijun_window', 45, 75), 
+            'cci_timeperiods': trial.suggest_int('cci_timeperiods', 20, 35),
             'macd_fastperiod': trial.suggest_int('macd_fastperiod', 5, 15), 
-            'macd_slowperiod': trial.suggest_int('macd_slowperiod', 20, 50), 
-            'macd_signalperiod': trial.suggest_int('macd_signalperiod', 2, 10),
+            'macd_slowperiod': trial.suggest_int('macd_slowperiod', 30, 40), 
+            'macd_signalperiod': trial.suggest_int('macd_signalperiod', 5, 10),
             'price_distribution_window_size': trial.suggest_int('price_distribution_window_size', 5, 5),   # 5,50
             'price_distribution_percentile_threshold': trial.suggest_float('price_distribution_percentile_threshold', 0.2, 0.2), # 0.2,0.5
-            'rsi_period': trial.suggest_int('rsi_period', 7, 30),
-            'rsi_slope_period': trial.suggest_int('rsi_slope_period', 10, 20),
-            'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 2, 15),
-            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 2, 15),
-            'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 10, 40),
-            'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 3, 15),
-            'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 25, 45),
+            'rsi_period': trial.suggest_int('rsi_period', 7, 25),
+            'rsi_slope_period': trial.suggest_int('rsi_slope_period', 15, 20),
+            'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 5, 12),
+            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 5, 15),
+            'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 20, 30),
+            'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 8, 15),
+            'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 30, 45),
 
-            'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 10, 20),
-            'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 3, 15),
-            'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 10, 20),
-            'train_range_len': trial.suggest_int('train_range_len', 15, 18),
+            'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 14, 20),
+            'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 3, 6),
+            'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 6, 15),
+            'train_range_len': trial.suggest_int('train_range_len', 15, 20),
             'test_range_len': trial.suggest_int('test_range_len', 4, 4),  #3,5
-            'hour_range_start': trial.suggest_int('hour_range_start', 6*60, 10*60, step=15),
+            'hour_range_start': trial.suggest_int('hour_range_start', 6*60, 600, step=15),
             # 'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
             'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
             'di_timeperiod': trial.suggest_int('di_timeperiod', 5, 15),
             'macd_slope_period': trial.suggest_int('macd_slope_period', 9, 9),
             'sl': trial.suggest_float('sl', 0.003, 0.004) if not params['evals_strategy'] else 0,
-            'tp': trial.suggest_float('tp', 0.002, 0.004) if not params['evals_strategy'] else trial.suggest_int('tp', 50, 150),
+            'tp': trial.suggest_float('tp', 0.0025, 0.0035) if not params['evals_strategy'] else trial.suggest_int('tp', 50, 150),
 
             'atr_period': trial.suggest_int('atr_period', 5, 10),
 
-            'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 5, 15),
-            'stochk_slope_period': trial.suggest_int('stochk_slope_period', 5, 15),
-            'willr_timeperiod': trial.suggest_int('willr_timeperiod', 15, 30),
+            'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 8, 15),
+            'stochk_slope_period': trial.suggest_int('stochk_slope_period', 10, 16),
+            'willr_timeperiod': trial.suggest_int('willr_timeperiod', 25, 35),
 
-            'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 7, 17),
+            'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 7, 12),
 
-            'target_tp': trial.suggest_float('target_tp', 0.002, 0.003),
-            'ema_period': trial.suggest_int('ema_period', 15, 25),
-            'ema_reversed_period': trial.suggest_int('ema_reversed_period', 5, 9),
+            'target_tp': trial.suggest_float('target_tp', 0.0025, 0.003),
+            'ema_period': trial.suggest_int('ema_period', 20, 30),
+            'ema_reversed_period': trial.suggest_int('ema_reversed_period', 6, 10),
             'threshold_long': trial.suggest_float('threshold_long', 0.8, 0.84),
             'threshold_short': trial.suggest_float('threshold_short', 0.15, 0.2),
-            'pred_ewm_span': trial.suggest_float('pred_ewm_span', 1, 2, step=0.1),
-            'pca_ichimoku': trial.suggest_categorical('pca_ichimoku', [True, False]),
-            'pca_kama': trial.suggest_categorical('pca_kama', [False, True]),
+            'pred_ewm_span': trial.suggest_float('pred_ewm_span', 1.2, 1.8, step=0.1),
+            'pca_ichimoku': trial.suggest_categorical('pca_ichimoku', [False]),
+            'pca_kama': trial.suggest_categorical('pca_kama', [False]),
             'weekday': trial.suggest_categorical('weekday', [2]),                     # 0: Monday, 2: Wednesday, 4: Friday
         }
 
         if not model_params_override:
-            model_params['hour_range_stop'] = trial.suggest_int('hour_range_stop', model_params['hour_range_start'] + 10*60, model_params['hour_range_start'] + 10*60)
+            model_params['hour_range_stop'] = trial.suggest_int('hour_range_stop', model_params['hour_range_start'] + 6*60, model_params['hour_range_start'] + 6*60)
 
             if params['evals_strategy']:
                 model_params['sl'] = trial.suggest_int('sl', model_params['tp'] // 1.5, model_params['tp'] // 1.5)
@@ -175,8 +175,8 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             p[i] = model_params
         X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], cutoff_date, lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
         y=y+1
-        X.to_csv('X.csv', index=True, header=True)
-        y.to_csv('y.csv', index=True, header=True)
+        # X.to_csv('X.csv', index=True, header=True)
+        # y.to_csv('y.csv', index=True, header=True)
         num_splits = params['num_splits']
 
         # Split the dataset to test and train sets
@@ -204,16 +204,23 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             train_split = unique_dates[i]
             train_start_idx = unique_dates[max(i-model_params['train_range_len']*5, 1)]
             test_end_idx = unique_dates[min(i+model_params['test_range_len']*5, len(unique_dates)-5)]
-
-            X_train, X_test = X.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split)], X.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
-            y_train, y_test = y.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split)], y.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
             print(train_start_idx, train_split, test_end_idx)
+
+            X_train = X.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split) & (X['minute_of_day']>=model_params['hour_range_start']) & (X['minute_of_day']<model_params['hour_range_stop'])]
+            y_train = y.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split) & (X['minute_of_day']>=model_params['hour_range_start']) & (X['minute_of_day']<model_params['hour_range_stop'])]
+
+            X_test = X.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
+            # y_test = y.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
+            y_test = None
+
             data_target = X_test.loc[:,['Open','High','Low','Close','minute_of_day']]
             data_target['sl']=model_params['sl']
             data_target['tp']=model_params['tp']
             
             # data_target['DaytradingExit'] = ((data_target.index.date != data_target.index.to_series().shift(periods=-1).dt.date) | (data_target.index.date != data_target.index.to_series().shift(periods=-2).dt.date))
-            data_target['DaytradingExit'] = (data_target['minute_of_day'] >= 23*60-5) & (data_target['minute_of_day'] <= 23*60)
+            data_target['DaytradingExit'] = (data_target['minute_of_day'] >= 21*60-15) & (data_target['minute_of_day'] <= 21*60)
+
+            X_test = X_test.loc[(X_test['minute_of_day']>=model_params['hour_range_start']) & (X_test['minute_of_day']<model_params['hour_range_stop'])]
 
             X_train=X_train.drop(columns=['minute_of_day', 'local_date'])
             X_test=X_test.drop(columns=['minute_of_day', 'local_date'])
@@ -224,7 +231,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
         results = []
         # with mp.Pool(10) as p:
-        with mp.Pool(8, maxtasksperchild=1) as p:
+        with mp.Pool(10, maxtasksperchild=1) as p:
             if params['evals_strategy']:
                 results = p.starmap(do_backtest_Strategy2_evals, tuples)
             else:
@@ -299,9 +306,9 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             sharpe_coeff = np.log(sharpe_mean) if sharpe_mean > 1 else sharpe_mean-1
 
             if params['evals_strategy']:
-                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) / np.log(model_params['test_range_len']-0.5) * (0.5 + sharpe_coeff/10 + win_rate + np.log(total_trades)/20 - avg_win/avg_loss/10)
+                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) * (0.5 + sharpe_coeff/10 + win_rate + np.log(total_trades)/20 - avg_win/avg_loss/10)
             else:
-                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) / np.log(model_params['test_range_len']-0.5) * (1 + sharpe_coeff/10 + win_rate/10 + np.log(total_trades)/10 - avg_win/avg_loss/20) #* np.sqrt(max(np.mean(sortino)+np.mean(calmar), 1)) / (parameters['hour_range_stop']-parameters['hour_range_start']+2)
+                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) * (1 + sharpe_coeff/10 + win_rate/10 + np.log(total_trades)/10 - avg_win/avg_loss/20) #* np.sqrt(max(np.mean(sortino)+np.mean(calmar), 1)) / (parameters['hour_range_stop']-parameters['hour_range_start']+2)
 
             mlflow.log_metric('optimisation_score', optimisation_score)
             
@@ -357,6 +364,12 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
                             draws = res['_trades'].loc[res['_trades']['PnL']==0, 'PnL']
                             mlflow.log_metric('draw_trades', draws.count())
+
+                            # TODO: Save res['_trades'] as artifact
+                            # print(res['_trades'])
+                            trades_path = os.path.join(params['models_path'], f'trades_{idx}.csv')
+                            res['_trades'].to_csv(trades_path, index=False)
+                            mlflow.log_artifact(local_path=trades_path, artifact_path='trades')
 
                         else:
                             mlflow.log_metric('total_trades', res['# Trades'])
@@ -435,7 +448,7 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
         p={}
         for i in indexes_higher:
             p[i] = model_params
-        X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], date(2025,1,1), lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
+        X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], date(2026,1,1), lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
         y=y+1
 
         train_splits = [train_split_index]
@@ -454,8 +467,9 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
         train_split = unique_weekdates[train_splits[-1]]
         train_start_idx = unique_weekdates[max(train_splits[-1]-model_params['train_range_len']*5, 1)]
 
-        X_train = X.loc[(X.index.date>train_start_idx) & (X.index.date<=train_split)]
-        y_train = y.loc[(X.index.date>train_start_idx) & (X.index.date<=train_split)]
+        X_train = X.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split)]
+        y_train = y.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split)]
+        X_train=X_train.drop(columns=['minute_of_day', 'local_date'])
 
         model_gpu = do_backtest_Strategy2_training(X_train, y_train, model_params)
 
@@ -485,20 +499,20 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
 
         importance_scores = model_gpu.get_score(importance_type='weight')
         sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
-        with open(os.path.join(params['models_path'], f'importance_scores_weight.json'), "w") as file_name:
+        with open(os.path.join(params['models_path'], 'importance_scores_weight.json'), "w") as file_name:
             json.dump(sorted_by_values, file_name)
-        mlflow.log_artifact(os.path.join(params['models_path'], f'importance_scores_weight.json'), artifact_path='importance_scores')
+        mlflow.log_artifact(os.path.join(params['models_path'], 'importance_scores_weight.json'), artifact_path='importance_scores')
 
         importance_scores = model_gpu.get_score(importance_type='gain')
         sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
-        with open(os.path.join(params['models_path'], f'importance_scores_gain.json'), "w") as file_name:
+        with open(os.path.join(params['models_path'], 'importance_scores_gain.json'), "w") as file_name:
             json.dump(sorted_by_values, file_name)
-        mlflow.log_artifact(os.path.join(params['models_path'], f'importance_scores_gain.json'), artifact_path='importance_scores')
+        mlflow.log_artifact(os.path.join(params['models_path'], 'importance_scores_gain.json'), artifact_path='importance_scores')
 
 
         # Save the trained model in the root directory
         print("Saving model parameters to json...")
-        model_params_path = os.path.join(params['models_path'], f"model_params_registration.json")
+        model_params_path = os.path.join(params['models_path'], "model_params_registration.json")
         save_model_params(model_params=model_params, file_path=model_params_path, logger=None)
         mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
 

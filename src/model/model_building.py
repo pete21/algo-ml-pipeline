@@ -151,7 +151,6 @@ def load_data(data_path: str, params: dict) -> dict:
 
 
 
-
 def main():
     print("Starting model building process...")
     try:

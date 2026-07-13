@@ -61,18 +61,13 @@ def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
     """Preprocess the data by adding date_merge column and static features"""
     try:
 
-        for i in params['data_ingestion_trade']['indexes_higher']:
-            data[i]["date_merge"] = (
-                data[i].index
-                + pd.to_timedelta(params['data_ingestion_trade']['timeframe_minutes'][i], "m")
-                - pd.to_timedelta(params['data_ingestion_trade']['timeframe_minutes'][params['data_ingestion_trade']['index_base']], "m")
-            )
-            # print(data[i].head())
+        local_timezone = pytz.timezone(params['data_ingestion_trade']['local_timezone'])
 
         for i in params['data_ingestion_trade']['indexes_higher'] + [params['data_ingestion_trade']['index_base']]:
-            local_timezone = pytz.timezone(params['data_ingestion_trade']['local_timezone'])
             data[i]['local_date'] = data[i].index.tz_localize('UTC').tz_convert(local_timezone)
             data[i] = static_features(data[i], params['data_ingestion_trade']['timeframe_scalers'][i], high_col="High", low_col="Low", open_col="Open", close_col="Close")
+            
+            data[i].drop(columns=['local_date'], inplace=True)
             if i != params['data_ingestion_trade']['index_base']:
                 data[i].drop(columns=['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'minute_of_day'], inplace=True)
 
@@ -90,7 +85,7 @@ def save_data(data: dict, params: dict, data_path: str, logger: logging.Logger) 
         
         # Create the data/raw directory if it does not exist
         os.makedirs(data_path, exist_ok=True)
-        
+        print("Saving data...")
         for i in params['data_ingestion_trade']['indexes_higher'] + [params['data_ingestion_trade']['index_base']]:
             print(f'Timeframe: {params['data_ingestion_trade']['timeframes'][i]}')
             data[i].to_csv(f'{data_path}/questdb_static_features_{params['data_ingestion_trade']['timeframes'][i]}.csv')
