@@ -189,9 +189,9 @@ def main():
 
 
         # Save the trained model in the root directory
-        print("Saving model parameters to json...")
-        model_params_path = os.path.join(params['models_path'], params['model_params_name'].format(timeframe=params['timeframe'], version=params['version']))
-        save_model_params(model_params=study.best_params, file_path=model_params_path, logger=logger)
+        # print("Saving model parameters to json...")                                   # Saved with every run, not needed here
+        # model_params_path = os.path.join(params['models_path'], params['model_params_name'].format(timeframe=params['timeframe'], version=params['version']))
+        # save_model_params(model_params=study.best_params, file_path=model_params_path, logger=logger)
 
 
         print("Saving study trials to csv...")
@@ -222,7 +222,7 @@ def main():
 
         with mlflow.start_run(run_id=run_id) as run:
             mlflow.log_artifact(local_path=os.path.join(params['models_path'],"optuna_trials.csv"), artifact_path='optuna_trials')
-            mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
+            # mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
             mlflow.log_metric('best', True)
     
     except Exception as e:

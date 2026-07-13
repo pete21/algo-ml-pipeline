@@ -2,6 +2,7 @@ import os
 import json
 import mlflow
 import logging
+from mlflow.entities import Experiment
 import pandas as pd
 from mlflow.tracking import MlflowClient
 
@@ -65,9 +66,8 @@ def fetch_trial_runs_dataframe(experiment_id: str) -> pd.DataFrame:
     return runs_df
 
 
-def load_model_params_from_experiment(client: MlflowClient, tags: dict, logger: logging.Logger) -> dict:
+def load_model_params_from_experiment(experiment: Experiment, logger: logging.Logger) -> dict:
     """Load model_params artifact from the best run of the latest experiment."""
-    experiment = find_latest_experiment(client, tags)
     best_run_name = experiment.tags.get("best_run_name")
     if not best_run_name:
         raise ValueError(
@@ -116,6 +116,24 @@ def load_model_params_from_experiment(client: MlflowClient, tags: dict, logger: 
         run_id,
     )
     return model_params
+
+
+# Search all positive value runs and return run params
+def search_positive_value_runs(experiment: Experiment) -> list[dict]:
+    """Search all positive value runs and return the run params of them."""
+    runs = mlflow.search_runs(
+        experiment_ids=[experiment.experiment_id],
+        filter_string="metrics.optimisation_score > 0",
+    )
+    print(f"Found {len(runs)} positive value runs")
+
+    # Sort rows by metrics.optimisation_score in descending order
+    runs = runs.sort_values(by="metrics.optimisation_score", ascending=False)
+    # Extract columns with "params" prefix
+    params_columns = [col for col in runs.columns if col.startswith("params.")]
+    runs = runs[params_columns]
+    # print(runs.to_dict(orient="records"))
+    return runs.iloc[:5].to_dict(orient="records")
 
 
 def save_model_params(model_params: dict, file_path: str, logger: logging.Logger = None) -> None:

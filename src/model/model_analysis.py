@@ -13,6 +13,7 @@ from src.model.mlflow_utils import (
     fetch_trial_runs_dataframe,
     find_latest_experiment,
     load_model_params_from_experiment,
+    search_positive_value_runs,
 )
 from dotenv import load_dotenv
 
@@ -107,6 +108,7 @@ def save_model_param_histograms(
     trial_runs_df: pd.DataFrame,
     model_param_names: list[str],
     model_params: dict,
+    positive_value_run_params: list[dict],
     output_dir: str,
 ) -> list[str]:
     """Save one histogram PNG per model parameter and return the saved file paths."""
@@ -115,6 +117,7 @@ def save_model_param_histograms(
 
     for name in model_param_names:
         col = f"params.{name}"
+        print(f"Param column: {col}")
         if col not in trial_runs_df.columns:
             logger.warning("Parameter '%s' not found in trial runs dataframe", name)
             continue
@@ -156,8 +159,19 @@ def save_model_param_histograms(
                         label="model_params artifact",
                     )
 
-        if ax.get_legend_handles_labels()[0]:
-            ax.legend()
+        for positive_value_run_param in positive_value_run_params:
+            positive_value_run_param_value = positive_value_run_param.get(col)
+            if positive_value_run_param_value is not None:
+                ax.axvline(
+                    x=pd.to_numeric(positive_value_run_param_value, errors="coerce"),
+                    color="#2ca02c",
+                    linestyle="--",
+                    linewidth=1,
+                    ymax=0.9,                                       # optimisation_score / max(optimisation_score)
+                )
+
+        # if ax.get_legend_handles_labels()[0]:
+        #     ax.legend()
 
         ax.set_ylabel("Count")
         ax.set_title(f"Distribution of {name}")
@@ -182,13 +196,16 @@ def main():
     target_metrics = params['model_analysis']['target_metrics']
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
-    model_params = load_model_params_from_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')), logger=logger)
-    print(f"Loaded model params: {model_params}")
 
     experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
     experiment_id = experiment.experiment_id
-
     print(f"Experiment ID: {experiment_id}")
+    
+    model_params = load_model_params_from_experiment(experiment, logger=logger)
+    print(f"Loaded model params: {model_params}")
+
+    positive_value_run_params = search_positive_value_runs(experiment)
+
 
     trial_runs_df = fetch_trial_runs_dataframe(experiment_id)
     print(f"Fetched {len(trial_runs_df)} Trial_* runs (excluding nested runs)")
@@ -217,6 +234,7 @@ def main():
         trial_runs_df,
         list(model_params.keys()),
         model_params,
+        positive_value_run_params,
         histograms_dir,
     )
     print(f"Saved {len(histogram_paths)} parameter histograms to {histograms_dir}")

@@ -71,7 +71,7 @@ stages:
     - model_building.num_splits
     - model_building.note
     - model_building.model_name
-    - model_building.model_params_name
+    # - model_building.model_params_name
     - model_building.evals_strategy
     - model_building.local_timezone
     outs:

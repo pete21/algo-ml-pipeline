@@ -50,7 +50,12 @@ def main():
 
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
-    model_params = load_model_params_from_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')), logger=logger)
+
+    experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
+    experiment_id = experiment.experiment_id
+    print(f"Experiment ID: {experiment_id}")
+
+    model_params = load_model_params_from_experiment(experiment, logger=logger)
     print(f"Loaded model params: {model_params}")
 
     last_weekdate = [d for d in unique_weekdates if d.weekday()==model_params['weekday']][-1]
@@ -58,8 +63,6 @@ def main():
     print(f"Train split index: {train_split_index}")
     print(f"Train split date: {unique_weekdates[train_split_index]}")
 
-    experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
-    experiment_id = experiment.experiment_id
     registered_model_name = train_register_model(data=data, params=params, unique_weekdates=unique_weekdates, train_split_index=train_split_index, experiment_id=experiment_id, model_params=model_params)
     print(f"Registered model name: {registered_model_name}")
 

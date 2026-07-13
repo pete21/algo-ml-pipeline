@@ -155,9 +155,9 @@ model_building:
   lags: [1,2]
   version: 1
   model_name: 'xgboost_model_with_pca_v1'
-  model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 100
-  num_splits: 21
+  # model_params_name: 'model_params_{timeframe}_v{version}.json'
+  n_trials: 50
+  num_splits: 25
   note: 'xgb-dax-pipeline with PCA'
   evals_strategy: False
   local_timezone: 'Europe/Berlin'
@@ -173,7 +173,6 @@ model_registration:
 model_analysis:
   target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor', 'total_trades']
   analysis_path: 'data/models/analysis'
-
 
 
 data_ingestion_trade:
