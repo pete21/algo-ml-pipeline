@@ -8,6 +8,11 @@ from sklearn.utils.class_weight import compute_sample_weight
 from random import randint
 import pandas as pd
 
+# # Set strict thresholds for execution
+# BUY_THRESHOLD = 0.5   # Must be 45% confident it goes Up
+# SELL_THRESHOLD = 0.5  # Must be 45% confident it goes Down
+# FLAT_MAX = 0.25        # Cannot be more than 25% confident it stays Flat
+
 # EMPTY_STATS = {
 #     'Start': datetime.now(),
 #     'End': None,
@@ -60,7 +65,8 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
         'gamma': params['gamma'],
         'objective': 'multi:softprob',
         'seed': rand_int,
-        'eval_metric': 'auc', #'merror',
+        'eval_metric': ['mlogloss', 'merror'],
+        'tree_method': 'hist'
         # 'verbose_eval': 1000
     }
 
@@ -92,11 +98,22 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
 
     print("Predicting...")
     y_pred = model_gpu.predict(dtest_gpu)
-    # print("X_test: ", X_test)
-    # print("y_pred: ", y_pred)
-    # print("Predicted.")
-    # print("Creating y_series...")
+
     y_pred_expected = np.matmul(y_pred, np.array([[-1],[0],[1]]))
+
+    # # Extract individual column probabilities
+    # prob_down = y_pred[:, 0]
+    # prob_flat = y_pred[:, 1]
+    # prob_up = y_pred[:, 2]
+
+    # # Initialize all predictions as 'Flat' (1)
+    # y_pred_expected = np.zeros(len(y_pred))
+
+    # # Apply the logic
+    # y_pred_expected[(prob_up > BUY_THRESHOLD) & (prob_flat < FLAT_MAX)] = 1   # Up
+    # y_pred_expected[(prob_down > SELL_THRESHOLD) & (prob_flat < FLAT_MAX)] = -1 # Down
+
+
     # print("y_pred_expected: ", y_pred_expected)
     # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
     # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=params['pred_avg_period'], min_periods=1).mean()

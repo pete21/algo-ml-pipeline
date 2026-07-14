@@ -1,5 +1,6 @@
 import json
 import numpy as np
+import pandas as pd
 from datetime import date
 import multiprocessing as mp
 from random import random
@@ -42,6 +43,11 @@ LOG_SPLITS_TABLE = {
     25: [ 1.0, 2.38,   3.668,  4.956,  6.198,  7.44,   8.59,   9.74,  10.844, 11.902, 12.96,  13.972, 14.938, 15.904, 16.824, 17.698, 18.572, 19.446, 20.228, 21.056, 21.792, 22.574, 23.264, 24.  ],
     }
 
+def flatten_concatenation(matrix):
+    flat_list = []
+    for row in matrix:
+        flat_list += row
+    return flat_list
 
 def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: list, experiment_id: str, model_params_override: dict = None) -> float:
 
@@ -72,36 +78,36 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         mlflow.log_params(params)
 
         model_params = model_params_override or {
-            'n_estimators': trial.suggest_int('n_estimators', 380, 400, step=5),
+            'n_estimators': trial.suggest_int('n_estimators', 390, 420, step=5),
             'max_depth': trial.suggest_int('max_depth', 7, 7),
-            'learning_rate': trial.suggest_float('learning_rate', 0.015, 0.02, step=0.001),
+            'learning_rate': trial.suggest_float('learning_rate', 0.015, 0.018, step=0.001),
             'subsample': trial.suggest_float('subsample', 0.95, 0.95),
             'gamma':  trial.suggest_float('gamma', 0.95, 0.95),
             # 'feature_fraction':  trial.suggest_float('feature_fraction', 0.9, 1),
             # 'num_leaves':  trial.suggest_int('num_leaves', 10, 200),
 
-            'sma1_period': trial.suggest_int('sma1_period', 7, 15),
-            'sma2_period': trial.suggest_int('sma2_period', 70, 100), 
+            'sma1_period': trial.suggest_int('sma1_period', 8, 15),
+            'sma2_period': trial.suggest_int('sma2_period', 75, 100), 
             'bb_periods': trial.suggest_int('bb_periods', 30, 55),
             'bb_nbdev': trial.suggest_float('bb_nbdev', 2, 2.25),
-            'ema1_period': trial.suggest_int('ema1_period', 5, 10),
+            'ema1_period': trial.suggest_int('ema1_period', 6, 12),
             'ema2_period': trial.suggest_int('ema2_period', 15, 35),
-            'sar_acc': trial.suggest_float('sar_acc', 0.3, 0.6), 
-            'sar_max': trial.suggest_float('sar_max', 0.4, 1), 
+            'sar_acc': trial.suggest_float('sar_acc', 0.4, 0.6), 
+            'sar_max': trial.suggest_float('sar_max', 0.5, 0.9), 
             'midprice_window': trial.suggest_int('midprice_window', 2, 2), # 2,30
-            'l1_fast': trial.suggest_int('l1_fast', 4, 10), # 15,3,10
-            'l2_fast': trial.suggest_int('l2_fast', 3, 5), 
-            'l3_fast': trial.suggest_int('l3_fast', 10, 20), 
-            'l1_slow': trial.suggest_int('l1_slow', 25, 40), 
+            'l1_fast': trial.suggest_int('l1_fast', 4, 9), # 15,3,10
+            'l2_fast': trial.suggest_int('l2_fast', 4, 6), 
+            'l3_fast': trial.suggest_int('l3_fast', 12, 20), 
+            'l1_slow': trial.suggest_int('l1_slow', 30, 40), 
             'l2_slow': trial.suggest_int('l2_slow', 5, 9),
             'l3_slow': trial.suggest_int('l3_slow', 20, 30),
-            'kama_trend_period': trial.suggest_int('kama_trend_period', 20, 35),
+            'kama_trend_period': trial.suggest_int('kama_trend_period', 25, 35),
 
-            'ha_candle_period': trial.suggest_int('ha_candle_period', 20, 40), 
-            'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 20, 35), 
-            'displacement_strength_period': trial.suggest_int('displacement_strength_period', 20, 35), 
+            'ha_candle_period': trial.suggest_int('ha_candle_period', 30, 45), 
+            'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 25, 35), 
+            'displacement_strength_period': trial.suggest_int('displacement_strength_period', 24, 35), 
             'displacement_strength': trial.suggest_float('displacement_strength', 1.2, 1.8),
-            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 10, 50), 
+            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 15, 50), 
             #    'displacement_sma_period': trial.suggest_int('displacement_sma_period', 2, 30), 
             'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 5, 10),
 
@@ -109,43 +115,43 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'gap_hull_period': trial.suggest_int('gap_hull_period', 8, 15),             # minimum 4
             'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 6, 15),
 
-            'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.003, 0.005),
-            'tenkan_window': trial.suggest_int('tenkan_window', 6, 12), 
-            'kijun_window': trial.suggest_int('kijun_window', 45, 75), 
+            'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.0035, 0.005),
+            'tenkan_window': trial.suggest_int('tenkan_window', 5, 11), 
+            'kijun_window': trial.suggest_int('kijun_window', 50, 75), 
             'cci_timeperiods': trial.suggest_int('cci_timeperiods', 20, 35),
-            'macd_fastperiod': trial.suggest_int('macd_fastperiod', 5, 15), 
-            'macd_slowperiod': trial.suggest_int('macd_slowperiod', 30, 40), 
+            'macd_fastperiod': trial.suggest_int('macd_fastperiod', 6, 13), 
+            'macd_slowperiod': trial.suggest_int('macd_slowperiod', 25, 35), 
             'macd_signalperiod': trial.suggest_int('macd_signalperiod', 5, 10),
             'price_distribution_window_size': trial.suggest_int('price_distribution_window_size', 5, 5),   # 5,50
             'price_distribution_percentile_threshold': trial.suggest_float('price_distribution_percentile_threshold', 0.2, 0.2), # 0.2,0.5
-            'rsi_period': trial.suggest_int('rsi_period', 7, 21),
+            'rsi_period': trial.suggest_int('rsi_period', 7, 18),
             'rsi_slope_period': trial.suggest_int('rsi_slope_period', 12, 20),
-            'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 5, 12),
+            'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 6, 12),
             'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 5, 15),
-            'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 20, 28),
-            'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 8, 15),
+            'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 20, 27),
+            'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 9, 15),
             'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 30, 45),
 
-            'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 12, 18),
+            'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 10, 16),
             'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 3, 6),
-            'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 8, 15),
-            'train_range_len': trial.suggest_int('train_range_len', 15, 20),
+            'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 8, 14),
+            'train_range_len': trial.suggest_int('train_range_len', 16, 22),
             'test_range_len': trial.suggest_int('test_range_len', 4, 4),  #3,5
-            'hour_range_start': trial.suggest_int('hour_range_start', 7*60, 10*60, step=15),
+            'hour_range_start': trial.suggest_int('hour_range_start', 6*60, 550, step=15),
             # 'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
             'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
-            'di_timeperiod': trial.suggest_int('di_timeperiod', 5, 15),
+            'di_timeperiod': trial.suggest_int('di_timeperiod', 5, 12),
             'macd_slope_period': trial.suggest_int('macd_slope_period', 9, 9),
             # 'sl': trial.suggest_float('sl', 0.003, 0.004) if not params['evals_strategy'] else 0,
             'tp': trial.suggest_float('tp', 0.0025, 0.0035) if not params['evals_strategy'] else trial.suggest_int('tp', 50, 150),
 
-            'atr_period': trial.suggest_int('atr_period', 4, 8),
+            'atr_period': trial.suggest_int('atr_period', 5, 10),
 
             'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 10, 15),
-            'stochk_slope_period': trial.suggest_int('stochk_slope_period', 10, 16),
+            'stochk_slope_period': trial.suggest_int('stochk_slope_period', 10, 15),
             'willr_timeperiod': trial.suggest_int('willr_timeperiod', 25, 35),
 
-            'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 7, 12),
+            'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 8, 12),
 
             'target_tp': trial.suggest_float('target_tp', 0.0025, 0.003),
             'ema_period': trial.suggest_int('ema_period', 20, 30),
@@ -164,7 +170,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             if params['evals_strategy']:
                 model_params['sl'] = trial.suggest_int('sl', model_params['tp'] // 1.5, model_params['tp'] // 1.5)
             else:
-                model_params['sl'] = trial.suggest_int('sl', model_params['tp'], model_params['tp'])
+                model_params['sl'] = trial.suggest_float('sl', model_params['tp'], model_params['tp'])
 
 
         data[index_base].loc[:,"labeling_binary"], data[index_base].loc[:,"labeling_dual_ema"], data[index_base].loc[:,"labeling_multi"] = build_target(data[index_base], \
@@ -218,6 +224,15 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
             X_train = X.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split) & (X['minute_of_day']>=model_params['hour_range_start']) & (X['minute_of_day']<model_params['hour_range_stop'])]
             y_train = y.loc[(X['local_date'].dt.date>train_start_idx) & (X['local_date'].dt.date<=train_split) & (X['minute_of_day']>=model_params['hour_range_start']) & (X['minute_of_day']<model_params['hour_range_stop'])]
+
+
+            # Remove outliers from X_train
+            outliers = X_train.loc[X_train['High']/X_train['Low']>1.005].index
+            extended_outliners = flatten_concatenation( [[outlier-pd.Timedelta(minutes=params['timeframe_minutes'][index_base]), outlier, outlier+pd.Timedelta(minutes=params['timeframe_minutes'][index_base]), outlier+pd.Timedelta(minutes=2*params['timeframe_minutes'][index_base])] for outlier in outliers] )
+            print('# outliers:', len(outliers))
+            X_train = X_train.loc[~X_train.index.isin(extended_outliners)]
+            y_train = y_train.loc[~y_train.index.isin(extended_outliners)]
+
 
             X_test = X.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
             # y_test = y.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]

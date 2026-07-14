@@ -156,7 +156,7 @@ model_building:
   version: 1
   model_name: 'xgboost_model_with_pca_v1'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 50
+  n_trials: 100
   num_splits: 25
   note: 'xgb-dax-pipeline with PCA'
   evals_strategy: False
