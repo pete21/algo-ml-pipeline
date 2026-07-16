@@ -66,18 +66,21 @@ def fetch_trial_runs_dataframe(experiment_id: str) -> pd.DataFrame:
     return runs_df
 
 
-def load_model_params_from_experiment(experiment: Experiment, logger: logging.Logger) -> dict:
+def load_model_params_from_experiment(experiment: Experiment, logger: logging.Logger, run_name: str = None) -> dict:
     """Load model_params artifact from the best run of the latest experiment."""
-    best_run_name = experiment.tags.get("best_run_name")
-    if not best_run_name:
-        raise ValueError(
-            f"Experiment '{experiment.name}' (id={experiment.experiment_id}) "
-            "is missing the 'best_run_name' tag"
-        )
+    if run_name:
+        best_run_name = run_name
+    else:
+        best_run_name = experiment.tags.get("best_run_name")
+        if not best_run_name:
+            raise ValueError(
+                f"Experiment '{experiment.name}' (id={experiment.experiment_id}) "
+                "is missing the 'best_run_name' tag"
+            )
 
     print(
         f"Using experiment '{experiment.name}' (id={experiment.experiment_id}), "
-        f"best_run_name='{best_run_name}'"
+        f"run name='{best_run_name}'"
     )
 
     runs = mlflow.search_runs(
@@ -126,6 +129,8 @@ def search_positive_value_runs(experiment: Experiment) -> list[dict]:
         filter_string="metrics.optimisation_score > 0",
     )
     print(f"Found {len(runs)} positive value runs")
+    if runs.empty:
+        return []
 
     # Sort rows by metrics.optimisation_score in descending order
     runs = runs.sort_values(by="metrics.optimisation_score", ascending=False)

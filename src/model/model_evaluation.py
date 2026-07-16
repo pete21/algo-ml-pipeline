@@ -120,12 +120,12 @@ def main():
 
     # Save the trained model in the root directory
     # print("Saving model parameters to json...")
-    model_params_path = os.path.join(params['models_path'], f"model_params_evaluation_{run_id}.json")
-    save_model_params(model_params=model_params, file_path=model_params_path, logger=logger)
+    # model_params_path = os.path.join(params['models_path'], f"model_params_evaluation_{run_id}.json")
+    # save_model_params(model_params=model_params, file_path=model_params_path, logger=logger)
 
     with mlflow.start_run(run_id=run_id) as run:
         mlflow.log_metric('optimisation_score', optimisation_score)
-        mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
+        # mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
 
 
 if __name__ == '__main__':

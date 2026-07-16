@@ -112,7 +112,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 #                 if timeframe_minutes[i]*int(m) > 240:
 # #                    print(f'Skipped: {x},{timeframes[i]},lag {m}')
 #                     continue
-            if x not in ['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', "local_date", "minute_of_day"]:          # local_date and minute_of_day are excluded because they are not lag features, but are allowed to be in the X_columns, removed before training
+            if x not in ['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', "local_date", "minute_of_day", col_open, col_high, col_low, col_close]:          # local_date and minute_of_day are excluded because they are not lag features, but are allowed to be in the X_columns, removed before training
                 X_columns.append(f"{x}_{timeframes[i]}")
 
     pca_data = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']-60) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop']+120)]  # pca slice - 60 minutes before and after the hour range

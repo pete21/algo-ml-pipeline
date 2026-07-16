@@ -75,7 +75,7 @@ stages:
     - model_building.evals_strategy
     - model_building.local_timezone
     outs:
-    - ${model_building.models_path}/model_params_${model_building.timeframe}_v${model_building.version}.json
+    # - ${model_building.models_path}/model_params_${model_building.timeframe}_v${model_building.version}.json
     - ${model_building.models_path}/optuna_trials.csv
     # - ${model_building.models_path}/model_params_5m_v1.json
 

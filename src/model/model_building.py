@@ -206,6 +206,9 @@ def main():
         run_object = mlflow.search_runs(filter_string=f"run_name = 'Trial_{study.best_trial.number}'")
         run_id = run_object["run_id"][0]
 
+        with mlflow.start_run(run_id=run_id) as run:
+            mlflow.log_metric('best', True)
+
         tags = {
             "project_name": "xgb-dax-pipeline",
             "stage": "building",
@@ -220,11 +223,14 @@ def main():
         print("Setting tags for experiment: ", tags)
         mlflow.set_experiment_tags(tags)
 
+        print(f"Searching for last run_id with run name: Trial_{len(study.trials)-1}")
+        # get run_id with run name 
+        run_object = mlflow.search_runs(filter_string=f"run_name = 'Trial_{len(study.trials)-1}'")
+        run_id = run_object["run_id"][0]
+        
         with mlflow.start_run(run_id=run_id) as run:
             mlflow.log_artifact(local_path=os.path.join(params['models_path'],"optuna_trials.csv"), artifact_path='optuna_trials')
-            # mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
-            mlflow.log_metric('best', True)
-    
+
     except Exception as e:
         logger.error('Failed to complete the feature engineering and model building process: %s', e)
         print(f"Error: {e}")

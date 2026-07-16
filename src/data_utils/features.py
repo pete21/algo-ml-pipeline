@@ -27,7 +27,7 @@ def build_target(df, open_col="open", high_col="high", low_col="low", high_time_
     low_time_col="low_time", tp=0.0025, ema_period=10, ema_reversed_period=40, threshold_long=0.75, threshold_short=0.25):
     
     # labeling_binary = double_barrier_labeling(df, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
-    labeling_binary = triple_barrier_labeling(df, 4, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
+    labeling_binary = triple_barrier_labeling(df, 2, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
 
     labeling_ema = talib.EMA(labeling_binary, ema_period)
 

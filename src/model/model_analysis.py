@@ -201,7 +201,7 @@ def main():
     experiment_id = experiment.experiment_id
     print(f"Experiment ID: {experiment_id}")
     
-    model_params = load_model_params_from_experiment(experiment, logger=logger)
+    model_params = load_model_params_from_experiment(experiment, logger=logger, run_name='Evaluation')
     print(f"Loaded model params: {model_params}")
 
     positive_value_run_params = search_positive_value_runs(experiment)
@@ -239,36 +239,26 @@ def main():
     )
     print(f"Saved {len(histogram_paths)} parameter histograms to {histograms_dir}")
 
-    best_run_name = experiment.tags.get("best_run_name")
-    if not best_run_name:
-        raise ValueError(
-            f"Experiment '{experiment.name}' (id={experiment.experiment_id}) "
-            "is missing the 'best_run_name' tag"
-        )
 
-    run_id = experiment.tags.get("best_run_id")
-    if not run_id:
-        print(f"Searching for run_id with run name: {best_run_name}")
-        run_object = mlflow.search_runs(
-            experiment_ids=[experiment_id],
-            filter_string=f"run_name = '{best_run_name}'",
+    runs = mlflow.search_runs(
+        experiment_ids=[experiment.experiment_id],
+        filter_string=f"run_name = 'Evaluation'",
+    )
+    if runs.empty:
+        raise ValueError(
+            f"No run named 'Evaluation' found in experiment "
+            f"'{experiment.name}' (id={experiment.experiment_id})"
         )
-        if run_object.empty:
-            raise ValueError(
-                f"No run named '{best_run_name}' found in experiment "
-                f"'{experiment.name}' (id={experiment_id})"
-            )
-        run_id = run_object.iloc[0]["run_id"]
+    run_id = runs.iloc[0]["run_id"]                                # Store output in the latest Evaluation run
 
     with mlflow.start_run(run_id=run_id) as run:
         mlflow.log_artifact(local_path=correlations_path, artifact_path='correlations')
         for metric in target_metrics:
             plot_path = os.path.join(analysis_dir, f"param_correlations_{metric}.png")
             mlflow.log_artifact(local_path=plot_path, artifact_path='correlations')
+        print(f"Logged correlations to MLflow run id {run_id} artifact path 'correlations'")
         mlflow.log_artifacts(local_dir=histograms_dir, artifact_path='histograms')
-        print(f"Logged {len(histogram_paths)} histograms to MLflow artifact path 'histograms'")
-
-
+        print(f"Logged {len(histogram_paths)} parameter histograms to MLflow run id {run_id} artifact path 'histograms'")
 
 
 if __name__ == '__main__':

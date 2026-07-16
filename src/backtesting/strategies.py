@@ -8,6 +8,8 @@ from sklearn.utils.class_weight import compute_sample_weight
 from random import randint
 import pandas as pd
 
+MULTI_CLASS_VALUES = np.array([[-0.9],[0],[0.9]])
+
 # # Set strict thresholds for execution
 # BUY_THRESHOLD = 0.5   # Must be 45% confident it goes Up
 # SELL_THRESHOLD = 0.5  # Must be 45% confident it goes Down
@@ -99,7 +101,7 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
     print("Predicting...")
     y_pred = model_gpu.predict(dtest_gpu)
 
-    y_pred_expected = np.matmul(y_pred, np.array([[-1],[0],[1]]))
+    y_pred_expected = np.matmul(y_pred, MULTI_CLASS_VALUES)
 
     # # Extract individual column probabilities
     # prob_down = y_pred[:, 0]
@@ -133,7 +135,7 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
         margin=1,
         trade_on_close=False,
         hedging=False,
-        exclusive_orders=True,
+        exclusive_orders=False,
         finalize_trades=True)
     stats = bt.run()
 
@@ -208,22 +210,29 @@ class Strategy2_opt_daytrading(Strategy):
             if self.position:      # daytrading
                 self.position.close()
             return
-        if self.data.y_pred[-1]>=0.5:
-            # if self.position.is_short:
-            #    self.position.close()
-            #    return
-            if not self.position:
-#                self.buy(size=math.floor(100000/self.data.Close[-1]), limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1])*self.data.Close[-1], tag=None)
+
+        if not self.position:
+            if self.data.y_pred[-1]>=0.5:
                 self.buy(size=1, limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1])*self.data.Close[-1], tag=None)
-
-        if self.data.y_pred[-1]<=-0.5:
-            # if self.position.is_long:
-            #    self.position.close()
-            #    return
-            if not self.position:
-#                self.sell(size=math.floor(100000/self.data.Close[-1]), limit=None, stop=None, tp=(1-self.data.tp[-1])*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
+                return
+            if self.data.y_pred[-1]<=-0.5:
                 self.sell(size=1, limit=None, stop=None, tp=(1-self.data.tp[-1])*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
+                return
 
+        # else:   # if there is position
+
+        #     if self.position.pl_pct >= 0.002: # if profit percentage is greater than 0.15%, adjust stop-loss to sl/2 from current price (~ break even price)
+        #         for trade in self.trades:
+        #             if trade.is_long:
+        #                 trade.sl = max(trade.sl or -np.inf, (1-self.data.sl[-1]/2)*self.data.Close[-1])
+        #             elif trade.is_short:
+        #                 trade.sl = min(trade.sl or np.inf, (1+self.data.sl[-1]/2)*self.data.Close[-1])
+
+            # if self.position.pl_pct >= 0.0015: # if profit percentage is greater than 0.2%, open addon trade with half SL and half TP
+            #     if self.data.y_pred[-1]>0.5 and self.position.size == 1:
+            #         self.buy(size=1, limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1]/2)*self.data.Close[-1], tag=None)
+            #     elif self.data.y_pred[-1]<-0.5 and self.position.size == -1:
+            #         self.sell(size=1, limit=None, stop=None, tp=(1-self.data.tp[-1]/2)*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
 
 
 ######################################################## EVALS STRATEGY ########################################################
@@ -240,7 +249,7 @@ def do_backtest_Strategy2_evals(X_train, X_test, y_train, y_test, data_target, p
         'gamma': params['gamma'],
         'objective': 'multi:softprob',
         'seed': rand_int,
-        'eval_metric': 'auc', #'merror',
+        'eval_metric': ['mlogloss', 'merror'],
         # 'verbose_eval': 1000
     }
 
@@ -274,7 +283,7 @@ def do_backtest_Strategy2_evals(X_train, X_test, y_train, y_test, data_target, p
     # print("y_pred: ", y_pred)
     # print("Predicted.")
     # print("Creating y_series...")
-    y_pred_expected = np.matmul(y_pred, np.array([[-1],[0],[1]]))
+    y_pred_expected = np.matmul(y_pred, MULTI_CLASS_VALUES)
     # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
     # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=params['pred_avg_period'], min_periods=1).mean()
     y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
@@ -341,8 +350,6 @@ class Strategy2_opt_evals(Strategy):
 
 
 
-
-
 def do_backtest_Strategy2_training(X_train, y_train, params):
     rand_int = randint(1000000, 2000000)
     params_gpu = {
@@ -354,7 +361,7 @@ def do_backtest_Strategy2_training(X_train, y_train, params):
         'gamma': params['gamma'],
         'objective': 'multi:softprob',
         'seed': rand_int,
-        'eval_metric': 'auc', #'merror',
+        'eval_metric': ['mlogloss', 'merror'],
         # 'verbose_eval': 1000
     }
 

@@ -43,7 +43,7 @@ def main():
     # Load the preprocessed data from the interim directory
     data = load_data(data_path=params['data_path'], params=params)
     
-    cutoff_date = datetime.today().date() - pd.Timedelta(days=730)
+    cutoff_date = datetime.today().date() - pd.Timedelta(days=364)
     for d in data:
         data[d] = data[d].loc[data[d].index.date>=cutoff_date]
     _, unique_weekdates = get_dates(data, params['index_base'])
