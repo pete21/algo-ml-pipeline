@@ -19,7 +19,7 @@ from src.model.mlflow_utils import save_model_params
 #     LOG_SPLITS_TABLE[num_splits] = num_splits-1-(np.round(np.logspace(0,10,num=num_splits-1,base=0.93308)-0.5,3))*((num_splits-2)*2)
 
 LOG_SPLITS_TABLE = {
-    # 2: [1.0],
+    2: [1.0],
     5: [1.0, 2.236, 3.22 , 4.   ],
     6: [1.0, 2.272, 3.344, 4.24 , 5.   ],
     7: [1.0, 2.29, 3.42, 4.4 , 5.25, 6.  ],
@@ -78,7 +78,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         mlflow.log_params(params)
 
         model_params = model_params_override or {
-            'n_estimators': trial.suggest_int('n_estimators', 390, 420, step=5),
+            'n_estimators': trial.suggest_int('n_estimators', 400, 420, step=5),
             'max_depth': trial.suggest_int('max_depth', 7, 7),
             'learning_rate': trial.suggest_float('learning_rate', 0.015, 0.018, step=0.001),
             'subsample': trial.suggest_float('subsample', 0.95, 0.95),
@@ -89,8 +89,8 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'sma1_period': trial.suggest_int('sma1_period', 8, 15),
             'sma2_period': trial.suggest_int('sma2_period', 80, 100), 
             'bb_periods': trial.suggest_int('bb_periods', 35, 45),
-            'bb_nbdev': trial.suggest_float('bb_nbdev', 2, 2.25),
-            'ema1_period': trial.suggest_int('ema1_period', 6, 14),
+            'bb_nbdev': trial.suggest_float('bb_nbdev', 1.9, 2.2),
+            'ema1_period': trial.suggest_int('ema1_period', 6, 12),
             'ema2_period': trial.suggest_int('ema2_period', 20, 30),
             'sar_acc': trial.suggest_float('sar_acc', 0.45, 0.6), 
             'sar_max': trial.suggest_float('sar_max', 0.6, 0.8), 
@@ -103,16 +103,16 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'l3_slow': trial.suggest_int('l3_slow', 20, 30),
             'kama_trend_period': trial.suggest_int('kama_trend_period', 25, 35),
 
-            'ha_candle_period': trial.suggest_int('ha_candle_period', 25, 35), 
+            'ha_candle_period': trial.suggest_int('ha_candle_period', 20, 32), 
             'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 25, 35), 
             'displacement_strength_period': trial.suggest_int('displacement_strength_period', 20, 30), 
             'displacement_strength': trial.suggest_float('displacement_strength', 1.2, 1.8),
-            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 12, 25), 
+            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 15, 25), 
             #    'displacement_sma_period': trial.suggest_int('displacement_sma_period', 2, 30), 
             'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 5, 10),
 
             'gap_lookback': trial.suggest_int('gap_lookback', 2, 7),
-            'gap_hull_period': trial.suggest_int('gap_hull_period', 8, 14),             # minimum 4
+            'gap_hull_period': trial.suggest_int('gap_hull_period', 10, 15),             # minimum 4
             'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 6, 13),
 
             'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.003, 0.004),
@@ -127,7 +127,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'rsi_period': trial.suggest_int('rsi_period', 9, 16),
             'rsi_slope_period': trial.suggest_int('rsi_slope_period', 12, 20),
             'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 5, 10),
-            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 5, 14),
+            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 7, 14),
             'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 20, 30),
             'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 9, 14),
             'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 30, 40),
@@ -137,7 +137,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 8, 14),
             'train_range_len': trial.suggest_int('train_range_len', 20, 22),
             'test_range_len': trial.suggest_int('test_range_len', 4, 4),  #3,5
-            'hour_range_start': trial.suggest_int('hour_range_start', 7*60, 8*60, step=15),
+            'hour_range_start': trial.suggest_int('hour_range_start', 450, 495, step=15),
             # 'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
             'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
             'di_timeperiod': trial.suggest_int('di_timeperiod', 5, 12),
@@ -147,17 +147,17 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
             'atr_period': trial.suggest_int('atr_period', 4, 8),
 
-            'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 8, 14),
+            'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 10, 15),
             'stochk_slope_period': trial.suggest_int('stochk_slope_period', 10, 15),
             'willr_timeperiod': trial.suggest_int('willr_timeperiod', 25, 30),
 
             'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 8, 12),
 
             'target_tp': trial.suggest_float('target_tp', 0.0025, 0.003),
-            'ema_period': trial.suggest_int('ema_period', 20, 30),
+            'ema_period': trial.suggest_int('ema_period', 18, 25),
             'ema_reversed_period': trial.suggest_int('ema_reversed_period', 7, 10),
-            'threshold_long': trial.suggest_float('threshold_long', 0.81, 0.84),
-            'threshold_short': trial.suggest_float('threshold_short', 0.16, 0.2),
+            'threshold_long': trial.suggest_float('threshold_long', 0.81, 0.85),
+            'threshold_short': trial.suggest_float('threshold_short', 0.15, 0.19),
             'pred_ewm_span': trial.suggest_float('pred_ewm_span', 1.3, 1.7, step=0.1),
             'pca_ichimoku': trial.suggest_categorical('pca_ichimoku', [False]),
             'pca_kama': trial.suggest_categorical('pca_kama', [False]),

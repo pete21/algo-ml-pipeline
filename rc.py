@@ -79,10 +79,10 @@ pprint.pprint(config)
 
 
 df_X = pd.read_csv("X.csv", index_col=0, parse_dates=True)
-df_X = df_X.iloc[7000:][cols]
+df_X = df_X.iloc[0:][cols]
 
 df_y = pd.read_csv("y.csv", index_col=0, parse_dates=True)
-df_y = df_y.iloc[7000:]["labeling_multi"]
+df_y = df_y.iloc[0:]["labeling_multi"]
 # df_y = df_y["labeling_multi"]
 
 
