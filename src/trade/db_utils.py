@@ -15,7 +15,8 @@ TRANSACTION_TYPE_TO_STATUS = {
     'FILLED': 2,
     'CLOSED': 3,
     'REJECTED': 4,
-    'CANCELLED': 5,
+    'CANCEL_PENDING': 5,
+    'CANCELLED': 6,
 }
 
 def _parse_mysql_host_port(mysql_url: str) -> tuple[str, int]:
@@ -136,7 +137,7 @@ def update_order_from_kafka_event(connection: mysql.connector.MySQLConnection, e
                 sql = f'UPDATE {ORDERS_TABLE} SET status = %s, close_price = %s, updated_at = NOW() WHERE order_id = %s and status = 2'
                 cursor.execute(sql, (status, float(price), int(order_id)))
             case 'CANCELLED':
-                sql = f'UPDATE {ORDERS_TABLE} SET status = %s, updated_at = NOW() WHERE order_id = %s and status in (0,1)'
+                sql = f'UPDATE {ORDERS_TABLE} SET status = %s, updated_at = NOW() WHERE order_id = %s and status in (5)'
                 cursor.execute(sql, (status, int(order_id)))
             case _:
                 logger.warning('Ignoring transaction event with unhandled type %s: %s', event_type, event)

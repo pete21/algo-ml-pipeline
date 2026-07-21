@@ -839,7 +839,7 @@ def market_regime_features(df, col_close="Close", col_high="High", col_low="Low"
     )
 
     #log_wma = np.log1p(np.abs(df["dc_market_regime_wma"]))*np.sign(df["dc_market_regime_wma"])
-    df['dc_market_regime_ema_log'] = np.log1p(np.abs(df["dc_market_regime_ema"]))*np.sign(df["dc_market_regime_ema"])
+    df['dc_market_regime_ema_log'] = np.log1p(np.abs(df["dc_market_regime_ema"]))*np.sign(df["dc_market_regime_ema"])*10
 
     df['kama_regime_fast'], df['kama_regime_slow'], df['kama_diff'], df['kama_trend_slow'], df['kama_trend_fast'] = kama_market_regime(df, col_close,
                                                                                                            l1_fast=l1_fast,

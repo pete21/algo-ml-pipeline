@@ -325,9 +325,9 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             sharpe_coeff = np.log(sharpe_mean) if sharpe_mean > 1 else sharpe_mean-1
 
             if params['evals_strategy']:
-                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) * (0.5 + sharpe_coeff/10 + win_rate + np.log(total_trades)/20 - avg_win/avg_loss/10)
+                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) * (0.5 + sharpe_coeff/10 + win_rate + np.log(total_trades)/10 - avg_win/avg_loss/10)
             else:
-                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) * (1 + sharpe_coeff/10 + win_rate/5 + np.log(total_trades)/10 - avg_win/avg_loss/10) #* np.sqrt(max(np.mean(sortino)+np.mean(calmar), 1)) / (parameters['hour_range_stop']-parameters['hour_range_start']+2)
+                optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) * (1 + sharpe_coeff/10 + win_rate/5 + np.log(total_trades)/5 - avg_win/avg_loss/10) #* np.sqrt(max(np.mean(sortino)+np.mean(calmar), 1)) / (parameters['hour_range_stop']-parameters['hour_range_start']+2)
 
             mlflow.log_metric('optimisation_score', optimisation_score)
             

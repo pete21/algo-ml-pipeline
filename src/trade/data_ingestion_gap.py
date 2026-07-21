@@ -112,7 +112,7 @@ if __name__ == '__main__':
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG)
 
-    file_handler = logging.FileHandler('trade_errors.log')
+    file_handler = logging.FileHandler('trade_agent_log.log')
     file_handler.setLevel(logging.ERROR)
 
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

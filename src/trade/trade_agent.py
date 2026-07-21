@@ -284,12 +284,15 @@ def run_cycle() -> None:
         if open_orders:
 
             # TODO: Check if the pending orders are older than CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES minutes and cancel them if they are
-            pending_orders = [order for order in open_orders if order['status'] == 0]
+            pending_orders = [order for order in open_orders if order['status'] == 1]
+            print(f"Number of pending orders: {len(pending_orders)}")
             for order in pending_orders:
-                if order['created_at'] < datetime.now(tz=timezone.utc) - timedelta(minutes=CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES):
+                if order['created_at'].astimezone(timezone.utc) < datetime.now(tz=timezone.utc) - timedelta(minutes=CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES):
                     cancelled = cancel_pending_order(order['order_id'])
                     if cancelled:
-                        update_order_from_marketbroker_response(mysql_connection, order['id'], 0, False, 'CANCELLED', error=None)
+                        print(f"Updating cancelled order {order['id']}")
+                        logger.info("Updating cancelled order %s", order['id'])
+                        update_order_from_marketbroker_response(mysql_connection, order['id'], order['order_id'], True, 'CANCEL_PENDING', error=None)
                         logger.info("Cancelled pending order %s because it is older than %d minutes", order['order_id'], CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES)
                     else:
                         logger.error("Failed to cancel pending order %s", order['order_id'])
