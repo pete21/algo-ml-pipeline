@@ -1,17 +1,17 @@
-import mlflow
 import logging
+import os
+from datetime import datetime
+
+import dvc.api
+import mlflow
 import optuna
 import pandas as pd
-import os
-import dvc.api
 import pytz
-from src.data_utils.utils import get_dates
-from src.backtesting.optimization import objective
-from datetime import date, datetime
 from dotenv import load_dotenv
 
+from src.backtesting.optimization import objective
+from src.data_utils.utils import get_dates
 from src.model.mlflow_utils import create_mlflow_experiment, save_model_params
-
 
 load_dotenv()
 
@@ -170,7 +170,7 @@ def main():
         unique_dates, unique_weekdates = get_dates(data, params['index_base'])
         cutoff_date = data[params['index_base']].index.date.min()+pd.Timedelta(21, "D")
 
-        experiment_name = f'xgb-dax-pipeline-v{params["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+        experiment_name = f'{params["note"]}-v{params["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
         if params['evals_strategy']:
             experiment_name += '-evals'
         else:
@@ -210,11 +210,11 @@ def main():
             mlflow.log_metric('best', True)
 
         tags = {
-            "project_name": "xgb-dax-pipeline",
+            "project_name": params['note'],
             "stage": "building",
             "mlflow.note.content": params['note'],
             "optimizer": "optuna",
-            "model_family": "xgboost",
+            "model_family": "svr",
             "model_name": params['model_name'],
             "best_trial_number": study.best_trial.number,
             "best_run_name": f"Trial_{study.best_trial.number}",

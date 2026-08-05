@@ -5,7 +5,7 @@ data_ingestion:
   data_source: 'questdb'
   table_name: 'DUKASCOPY_{ticker}_OHLC_{timeframe}'
   start_date: '2021-07-01'
-  end_date: '2026-06-30'
+  end_date: '2026-07-31'
   timeframe: '1m'
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   indexes: [1,5,7,10]
@@ -39,21 +39,22 @@ model_building:
   timeframe_minutes: [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 60, 120, 240, 1440]
   file_name: 'data_static_features_{timeframe}.csv'
   list_X: [
+    'ha_open',
+    'ha_high',
+    'ha_low',
     'ha_close',
-    #'ha_low',
+    # 'Open',
     # 'High',
     # 'Low',
-    'Close',
+    # 'Close',
     #'midprice',
-    # 'Open',
-    #'ha_high',
     #'macdsignal',
-    #'ha_open',
+
     #'sar',
-    'tenkan_sen',
+    # 'tenkan_sen',
     #'ema1',
     #'sma1',
-    'kijun_sen',
+    # 'kijun_sen',
     #'lowerband',
     'sine',
     #'middleband',
@@ -140,7 +141,7 @@ model_building:
     #'wavelet_reconstr',
     #'hurst',
     #'hurst_kalman',
-    'close_wavelet_rolling',
+    # 'close_wavelet_rolling',
     # 'close_regr_entropy',
     'permutation_entropy',
     # "tail_index_1",
@@ -155,11 +156,11 @@ model_building:
   col_y: ['labeling_multi']
   lags: [1,2]
   version: 1
-  model_name: 'xgboost_model_with_pca_v1'
+  model_name: 'svr_model_v{version}'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 100
+  n_trials: 500
   num_splits: 25
-  note: 'xgb-dax-pipeline with PCA'
+  note: 'svr-dax-pipeline'
   evals_strategy: False
   local_timezone: 'Europe/Berlin'
 

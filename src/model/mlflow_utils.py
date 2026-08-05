@@ -1,12 +1,12 @@
-import os
 import json
-import mlflow
 import logging
-from mlflow.entities import Experiment
-import pandas as pd
-from mlflow.tracking import MlflowClient
+import os
 
+import mlflow
+import pandas as pd
 from dotenv import load_dotenv
+from mlflow.entities import Experiment
+from mlflow.tracking import MlflowClient
 
 load_dotenv()
 
@@ -136,9 +136,9 @@ def search_positive_value_runs(experiment: Experiment) -> list[dict]:
     runs = runs.sort_values(by="metrics.optimisation_score", ascending=False)
     # Extract columns with "params" prefix
     params_columns = [col for col in runs.columns if col.startswith("params.")]
-    runs = runs[params_columns]
+    runs = runs[params_columns + ["metrics.optimisation_score"]]
     # print(runs.to_dict(orient="records"))
-    return runs.iloc[:5].to_dict(orient="records")
+    return runs.iloc[:10].to_dict(orient="records")
 
 
 def save_model_params(model_params: dict, file_path: str, logger: logging.Logger = None) -> None:

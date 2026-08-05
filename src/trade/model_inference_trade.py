@@ -94,8 +94,8 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
 
         model_params = fetch_model_params(url=MODEL_PARAMS_URL, logger=logger)
         print(f"Loaded model params: {model_params}")
-        model_params['hour_range_start'] = 2*60
-        model_params['hour_range_stop'] = 23*60
+        model_params['hour_range_start'] = 6*60
+        model_params['hour_range_stop'] = 20*60
 
         p={}
         for i in params['model_building']['indexes_higher']:
@@ -122,7 +122,7 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         print(X.tail())
         # print(y.head())
         # print(columns)
-        num_rows = 10
+        num_rows = 5
         predictions = request_predictions(X, url=PREDICT_URL, n_rows=num_rows, logger=logger)
         print(f"Received {len(predictions.get('predictions', []))} predictions")
         print(predictions)

@@ -1,12 +1,13 @@
-import pandas as pd
-import numpy as np
-import os
 import logging
+import os
+
+# from src.data_utils.utils import load_params
+import dvc.api
+import numpy as np
+import pandas as pd
 import pytz
 
 from src.data_utils.static_features import static_features
-# from src.data_utils.utils import load_params
-import dvc.api
 
 # logging configuration
 logger = logging.getLogger('data_preprocessing')

@@ -1,43 +1,139 @@
-import talib
-from hurst import compute_Hc
-from scipy.signal import hilbert
 from math import exp
+
+import numba
 import numpy as np
+
 # import polars as pl
 import pandas as pd
+import talib
+from hurst import compute_Hc
 from pandas import DataFrame, Series
+from pykalman import KalmanFilter
+from scipy.signal import hilbert
+
 #from functools import lru_cache
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import StandardScaler
-import numba
-from src.data_utils.wavelet import wavelet_denoising_rolling
-from pykalman import KalmanFilter
-from src.data_utils.features_engineering.volatility.close_to_close import close_to_close_volatility
-from src.data_utils.target_engineering.directional.barriers import double_barrier_labeling, triple_barrier_labeling
-from src.data_utils.features_engineering.volatility.range_estimators import rogers_satchell_volatility
-from src.data_utils.features_engineering.volatility.range_estimators import parkinson_volatility
-from src.data_utils.features_engineering.volatility.range_estimators import yang_zhang_volatility
-import src.data_utils.features_engineering.trend as trend
-import src.data_utils.features_engineering.math as math
 
+from src.data_utils.features_engineering import math, trend
+from src.data_utils.features_engineering.volatility.close_to_close import (
+    close_to_close_volatility,
+)
+from src.data_utils.features_engineering.volatility.range_estimators import (
+    parkinson_volatility,
+    rogers_satchell_volatility,
+    yang_zhang_volatility,
+)
+from src.data_utils.target_engineering.directional.barriers import (
+    double_barrier_labeling,
+    triple_barrier_labeling,
+)
 
 ### Target
 
-def build_target(df, open_col="open", high_col="high", low_col="low", high_time_col="high_time",
+def build_target_triple(df, open_col="open", high_col="high", low_col="low", high_time_col="high_time",
     low_time_col="low_time", tp=0.0025, ema_period=10, ema_reversed_period=40, threshold_long=0.75, threshold_short=0.25):
     
     # labeling_binary = double_barrier_labeling(df, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
     labeling_binary = triple_barrier_labeling(df, 2, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
 
-    labeling_ema = talib.EMA(labeling_binary, ema_period)
+    labeling_ema = talib.EMA(labeling_binary, ema_period).fillna(0)
 
     labeling_reversed = labeling_binary[::-1]
-    labeling_ema_reversed = talib.EMA(labeling_reversed, ema_reversed_period)
-    labeling_dual_ema = np.roll((labeling_ema + labeling_ema_reversed)/2, 3)
+    labeling_ema_reversed = talib.EMA(labeling_reversed, ema_reversed_period).fillna(0)
+    # labeling_dual_ema = np.roll((labeling_ema + labeling_ema_reversed)/2, 1)
+    labeling_dual_ema = (labeling_ema + labeling_ema_reversed)/2
     # labeling_dual_ema.fillna(0, inplace=True)
     labeling_multi = np.where(labeling_dual_ema>=threshold_long*2-1, 1, np.where(labeling_dual_ema<=threshold_short*2-1, -1, 0))
 
     return labeling_binary, labeling_dual_ema, labeling_multi
+
+def build_target(df, open_col="open", high_col="high", low_col="low", high_time_col="high_time",
+    low_time_col="low_time", tp=0.003, ema_period=10, ema_reversed_period=40, threshold_long=0.8, threshold_short=0.2):
+    
+    labeling_binary = double_barrier_labeling(df, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
+
+    labeling_ema = talib.EMA(labeling_binary, ema_period).fillna(0)
+
+    labeling_reversed = labeling_binary[::-1]
+    labeling_ema_reversed = talib.EMA(labeling_reversed, ema_reversed_period).fillna(0)
+    # labeling_dual_ema = np.roll((labeling_ema + labeling_ema_reversed)/2, 1)
+    labeling_dual_ema = (labeling_ema + labeling_ema_reversed)/2
+    # labeling_dual_ema.fillna(0, inplace=True)
+    labeling_multi = np.where(labeling_dual_ema>=threshold_long*2-1, 1, np.where(labeling_dual_ema<=threshold_short*2-1, -1, 0))
+
+    return labeling_binary, labeling_dual_ema, labeling_multi
+
+# Target new 2
+def build_target_2(df, labeling_col="labeling_dual_ema", threshold=0.48):
+    df.loc[:,"l_min"] = df["ha_close"].shift(-9).rolling(window=9).min()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"l_max"] = df["ha_close"].shift(3).rolling(window=9).max()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"s_min"] = df["ha_close"].shift(3).rolling(window=9).min()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"s_max"] = df["ha_close"].shift(-9).rolling(window=9).max()#/ml_data[params['index_base']]["ha_close"]
+    # ml_data[params['index_base']].loc[:,"labeling_multi_return"] = (ml_data[params['index_base']]["ha_close"].shift(-24)/ml_data[params['index_base']]["ha_close"])
+
+    df.loc[:,"signal_up"] = 0
+    df.loc[:,"signal_down"] = 0
+    # mask_up = (ml_data[params['index_base']].loc[:,"labeling_multi_return"] > 1+threshold) & (ml_data[params['index_base']].loc[:,"labeling_multi_min"]>0.9993)
+    # mask_down = (ml_data[params['index_base']].loc[:,"labeling_multi_return"] < 1-threshold) & (ml_data[params['index_base']].loc[:,"labeling_multi_max"]<1.0007)
+    mask_up = df.loc[:,"l_min"]>df.loc[:,"l_max"]
+    mask_down = df.loc[:,"s_max"]<df.loc[:,"s_min"]
+    # mask_flat = ~(mask_up | mask_down)
+    df.loc[mask_up, "signal_up"] = 1
+    df.loc[mask_down, "signal_down"] = -1
+    # ml_data[params['index_base']].loc[mask_flat, "labeling_multi"] = 0
+    # ml_data[params['index_base']].loc[:,"labeling_multi2"] = ml_data[params['index_base']]["labeling_multi2"].shift(1)
+    # ml_data[params['index_base']].loc[:,"labeling_multi2"] = ml_data[params['index_base']]["labeling_multi2"].fillna(0)
+    df.loc[:,"labeling_multi2_sma"] = (df[labeling_col]+df["signal_up"]+df["signal_down"]).rolling(9).mean()/2
+
+    df.loc[:,"labeling_multi"] = 0
+    mask_up = df.loc[:,"labeling_multi2_sma"] > threshold
+    mask_down = df.loc[:,"labeling_multi2_sma"] < -threshold
+    df.loc[mask_up,"labeling_multi"] = 1
+    df.loc[mask_down,"labeling_multi"] = -1
+
+    return df
+
+# Target new 2b
+
+def build_target_2b(df, ref_column="ha_close"):
+    df.loc[:,"l_min"] = df[ref_column].shift(-24).rolling(window=24).min()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"l_max"] = df[ref_column].shift(0).rolling(window=24).max()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"s_min"] = df[ref_column].shift(0).rolling(window=24).min()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"s_max"] = df[ref_column].shift(-24).rolling(window=24).max()#/ml_data[params['index_base']]["ha_close"]
+    # ml_data[params['index_base']].loc[:,"labeling_multi_return"] = (ml_data[params['index_base']]["ha_close"].shift(-24)/ml_data[params['index_base']]["ha_close"])
+
+    df.loc[:,"labeling_multi_up"] = (df.loc[:,"l_min"]/df.loc[:,"l_max"]-1)
+    df.loc[:, "labeling_multi_down"] = (-df.loc[:,"s_min"]/df.loc[:,"s_max"]+1)
+
+    # df.loc[:,"labeling_multi2"] = (-np.log1p(-100*df["labeling_multi_up"])+np.log1p(100*df["labeling_multi_down"])).rolling(2).mean()
+    df.loc[:,"labeling_multi2"] = (-np.log1p(-200*df["labeling_multi_up"]+0.1)+np.log1p(200*df["labeling_multi_down"]+0.1)).ewm(span=12, adjust=False).mean()
+
+
+    # df.loc[:,"labeling_multi2_sma"] = (df[labeling_col]+df["signal_up"]+df["signal_down"]).rolling(9).mean()/2
+
+    return df
+
+# Target new 2c
+
+def build_target_2c(df, ref_column="ha_close", periods=24):
+
+    df.loc[:,"l_min"] = df[ref_column].shift(-periods).rolling(window=periods).min()#/dax_data[index_base]["ha_close"]
+    df.loc[:,"l_max"] = df["High"].rolling(window=periods).mean()#/dax_data[index_base]["ha_close"]
+
+    df.loc[:,"s_min"] = df["Low"].rolling(window=periods).mean()#/dax_data[index_base]["ha_close"]
+    df.loc[:,"s_max"] = df[ref_column].shift(-periods).rolling(window=periods).max()#/dax_data[index_base]["ha_close"]
+
+
+    df.loc[:,"labeling_multi_up"] = (df.loc[:,"l_min"]/df.loc[:,"l_max"]-1)
+    df.loc[:, "labeling_multi_down"] = (-df.loc[:,"s_min"]/df.loc[:,"s_max"]+1)
+
+    # df.loc[:,"labeling_multi2"] = (-np.log1p(-100*df["labeling_multi_up"])+np.log1p(100*df["labeling_multi_down"])).rolling(2).mean()
+    df.loc[:,"labeling_multi2"] = (-np.log1p(-200*df["labeling_multi_up"])+np.log1p(200*df["labeling_multi_down"])).ewm(span=12, adjust=False).mean()/2
+
+    # df.loc[:,"labeling_multi2_sma"] = (df[labeling_col]+df["signal_up"]+df["signal_down"]).rolling(9).mean()/2
+
+    return df
 
 
 ### Candle
@@ -430,8 +526,8 @@ def kama_market_regime(df, col="Close", l1_fast=50, l2_fast=2, l3_fast=30, l1_sl
     kama_diff_pct = (kama_fast - kama_slow)/kama_slow * 100
 
     #    kama_trend = np.sign(kama_diff)
-    kama_trend_slow = talib.LINEARREG_ANGLE(kama_slow, kama_trend_period)
-    kama_trend_fast = talib.LINEARREG_ANGLE(kama_fast, kama_trend_period)
+    kama_trend_slow = talib.LINEARREG_ANGLE(kama_slow, kama_trend_period)/10
+    kama_trend_fast = talib.LINEARREG_ANGLE(kama_fast, kama_trend_period)/10
 
     return kama_fast, kama_slow, kama_diff_pct, kama_trend_slow, kama_trend_fast
 
@@ -753,7 +849,7 @@ def momentum(df, col_close="Close", col_high="High", col_low="Low", rsi_period=1
     cci = talib.CCI(df.High, df.Low, df.Close, timeperiod=14)
 
     macd, macdsignal, macdhist = talib.MACDEXT(df.Close, fastperiod=12, fastmatype=0, slowperiod=26, slowmatype=0, signalperiod=9, signalmatype=0)
-
+    macdhist = macdhist/10
     ppo = talib.PPO(df.Close, fastperiod=12, slowperiod=26, matype=0)
 
     minus_di = talib.MINUS_DI(df.High, df.Low, df.Close, timeperiod=14)
@@ -835,7 +931,7 @@ def market_regime_features(df, col_close="Close", col_high="High", col_low="Low"
     df['dc_market_regime_ema'] = talib.EMA(df.loc[:,"dc_market_regime"], dc_market_regime_period)
     df['dc_market_regime_wma'] = talib.WMA(
                 2 * talib.WMA(df.loc[:,"dc_market_regime"], dc_market_regime_period // 2) - talib.WMA(df.loc[:,"dc_market_regime"], dc_market_regime_period),
-                int(round(np.sqrt(dc_market_regime_period)))
+                round(np.sqrt(dc_market_regime_period))
     )
 
     #log_wma = np.log1p(np.abs(df["dc_market_regime_wma"]))*np.sign(df["dc_market_regime_wma"])
@@ -854,9 +950,9 @@ def market_regime_features(df, col_close="Close", col_high="High", col_low="Low"
 # Replacement with hull
     df['gap_hull'] = talib.WMA(
                 2 * talib.WMA(df["bullish_gap"]+df["bearish_gap"], gap_hull_period // 2) - talib.WMA(df["bullish_gap"]+df["bearish_gap"], gap_hull_period),
-                int(round(np.sqrt(gap_hull_period))),
+                round(np.sqrt(gap_hull_period)),
     )
-    df['gap_hull_slope'] = talib.LINEARREG_ANGLE(df['gap_hull'], gap_hull_slope_period)
+    df['gap_hull_slope'] = talib.LINEARREG_ANGLE(df['gap_hull'], gap_hull_slope_period)/10
 #    df['gap_ema'] = talib.EMA(df.loc[:,"bullish_gap"]+df.loc[:,"bearish_gap"], gap_ema_period)*2
 #    df['gap_ema_slope'] = talib.LINEARREG_ANGLE(df['gap_hull'], gap_ema_slope_period)
 #
@@ -970,8 +1066,8 @@ def supertrend(dataframe: pd.DataFrame, multiplier, atr_period=14, close_col="cl
 
 # Elliot Wave Oscillator
 def ewo(dataframe, sma1_length=5, sma2_length=35):
-    sma1 = ta.EMA(dataframe, timeperiod=sma1_length)
-    sma2 = ta.EMA(dataframe, timeperiod=sma2_length)
+    sma1 = talib.EMA(dataframe, timeperiod=sma1_length)
+    sma2 = talib.EMA(dataframe, timeperiod=sma2_length)
     smadif = (sma1 - sma2) / dataframe["close"] * 100
     return smadif
 
@@ -1036,7 +1132,7 @@ def williams_r(dataframe: DataFrame, period: int = 14) -> Series:
     of the past N days (for a given N). It was developed by a publisher and promoter of trading materials, Larry Williams.
     Its purpose is to tell whether a stock or commodity market is trading near the high or the low, or somewhere in between,
     of its recent trading range.
-    The oscillator is on a negative scale, from âˆ’100 (lowest) up to 0 (highest).
+    The oscillator is on a negative scale, from -100 (lowest) up to 0 (highest).
     """
     highest_high = dataframe["high"].rolling(center=False, window=period).max()
     lowest_low = dataframe["low"].rolling(center=False, window=period).min()
@@ -1053,14 +1149,14 @@ def vwma(dataframe: DataFrame, length: int = 10):
     """Indicator: Volume Weighted Moving Average (VWMA)"""
     # Calculate Result
     pv = dataframe["close"] * dataframe["volume"]
-    vwma = Series(ta.SMA(pv, timeperiod=length) / ta.SMA(dataframe["volume"], timeperiod=length))
+    vwma = Series(talib.SMA(pv, timeperiod=length) / talib.SMA(dataframe["volume"], timeperiod=length))
     return vwma
 
 
 # Modified Elder Ray Index
 
 def moderi(dataframe: DataFrame, len_slow_ma: int = 32) -> Series:
-    slow_ma = Series(ta.EMA(vwma(dataframe, length=len_slow_ma), timeperiod=len_slow_ma))
+    slow_ma = Series(talib.EMA(vwma(dataframe, length=len_slow_ma), timeperiod=len_slow_ma))
     return slow_ma >= slow_ma.shift(1)  # we just need true & false for ERI trend
 
 
@@ -1072,7 +1168,7 @@ def zlema(dataframe, timeperiod):
         ema_data = dataframe + (dataframe - dataframe.shift(lag))
     else:
         ema_data = 2*dataframe["close"] - dataframe["close"].shift(lag)
-    return ta.EMA(ema_data, timeperiod=timeperiod)
+    return talib.EMA(ema_data, timeperiod=timeperiod)
 
 
 # zlhull
@@ -1083,8 +1179,8 @@ def zlhull(dataframe, timeperiod):
         wma_data = dataframe + (dataframe - dataframe.shift(lag))
     else:
         wma_data = 2*dataframe["close"] - dataframe["close"].shift(lag)
-    return ta.WMA(
-        2 * ta.WMA(wma_data, int(math.floor(timeperiod / 2))) - ta.WMA(wma_data, timeperiod),
+    return talib.WMA(
+        2 * talib.WMA(wma_data, int(math.floor(timeperiod / 2))) - talib.WMA(wma_data, timeperiod),
         int(round(np.sqrt(timeperiod))),
     )
 
@@ -1093,14 +1189,14 @@ def zlhull(dataframe, timeperiod):
 
 def hull(dataframe, timeperiod):
     if isinstance(dataframe, Series):
-        return ta.WMA(
-            2 * ta.WMA(dataframe, int(math.floor(timeperiod / 2))) - ta.WMA(dataframe, timeperiod),
+        return talib.WMA(
+            2 * talib.WMA(dataframe, int(math.floor(timeperiod / 2))) - talib.WMA(dataframe, timeperiod),
             int(round(np.sqrt(timeperiod))),
         )
     else:
-        return ta.WMA(
-            2 * ta.WMA(dataframe["close"], int(math.floor(timeperiod / 2)))
-            - ta.WMA(dataframe["close"], timeperiod),
+        return talib.WMA(
+            2 * talib.WMA(dataframe["close"], int(math.floor(timeperiod / 2)))
+            - talib.WMA(dataframe["close"], timeperiod),
             int(round(np.sqrt(timeperiod))),
         )
 

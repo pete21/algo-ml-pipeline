@@ -1,13 +1,14 @@
-import pandas as pd
-import os
 import logging
+import os
 from datetime import date
+
+import dvc.api
+import pandas as pd
+from dotenv import load_dotenv
+from sqlalchemy import Connection, create_engine
+
 # from src.data_utils.utils import load_params
 from src.data_utils.wavelet import wavelet_denoising2
-
-from sqlalchemy import Connection, create_engine
-from dotenv import load_dotenv
-import dvc.api
 
 TICKERS = {
     'DAX40': '6374',
@@ -73,7 +74,7 @@ def load_data(params: dict, logger: logging.Logger) -> dict:
         raise
 
 def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
-    """Preprocess the data by adding Close_wavelet column and date_merge column"""
+    """Preprocess the data by adding Close_wavelet column, date_merge column is not added"""
     try:
         data[params['index_barrier']].loc[:,'Close_wavelet'] = wavelet_denoising2(data[params['index_barrier']]['Close'], wavelet='db6', lvl=8, clear_levels=3)
 

@@ -1,14 +1,33 @@
+# import cudf
+# import cupy as cp
+
+from random import randint
+
+# import matplotlib.pyplot as plt
 import numpy as np
-from backtesting import Backtest
+import pandas as pd
 from backtesting.lib import Strategy
 
 # from xgboost import XGBClassifier
 from scipy.special import softmax
-from xgboost import DMatrix, train
+from sklearn.linear_model import (
+    ElasticNet,
+    Lasso,
+    LinearRegression,
+    LogisticRegression,
+    Ridge,
+)
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC, SVR
 from sklearn.utils.class_weight import compute_sample_weight
-from random import randint
-import pandas as pd
-import matplotlib.pyplot as plt
+from xgboost import DMatrix, train
+
+from backtesting import Backtest
+
+# from scipy.sparse import csr_matrix
+
+COMMISSION = 0.00006
+
 
 MULTI_CLASS_VALUES = np.array([[-0.9],[0],[0.9]])
 
@@ -250,9 +269,9 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
     dtest_gpu = DMatrix(X_test)
 
     # Define evaluation list to monitor both sets
-    evals_result = {}
+    # evals_result = {}
     # watchlist = [(dtrain_gpu, 'train'), (dtest_gpu, 'val')]
-    watchlist = [(dtrain_gpu, 'train')]
+    # watchlist = [(dtrain_gpu, 'train')]
 
 
     # print("dtrain_gpu: ", dtrain_gpu.shape)
@@ -350,7 +369,7 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
         Strategy2_opt_daytrading,
         cash=100000,
         spread=0,
-        commission=0.00008,
+        commission=COMMISSION,
         margin=1,
         trade_on_close=False,
         hedging=False,
@@ -360,6 +379,337 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
 
     return y_series, stats #, model_gpu
 
+
+def do_backtest_Strategy2_trading_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+    rand_int = randint(1000000, 2000000)
+    params_gpu = {
+        'device': 'gpu',
+        'learning_rate': params['learning_rate'],
+        # 'n_estimators': params['n_estimators'],
+        'max_depth': params['max_depth'],
+        'subsample': params['subsample'],
+        'gamma': params['gamma'],
+        'objective': 'reg:squarederror',
+        'eval_metric': ['rmse', 'mae'],
+        'tree_method': 'hist',
+        'random_state': rand_int,
+        # 'verbose_eval': 1000
+    }
+
+    sample_weights = compute_sample_weight(
+        class_weight='balanced',
+        y=y_train
+    )
+
+    # scaler = StandardScaler()
+    # X_train_scaled = scaler.fit_transform(X_train)
+    # X_test_scaled = scaler.transform(X_test)
+
+    dtrain_gpu = DMatrix(X_train, label=y_train, weight=sample_weights)
+    dtest_gpu = DMatrix(X_test)
+
+
+    print("Training model...")
+    # model_gpu = XGBRegressor(**params_gpu)
+    # model_gpu.fit(X_train, y_train, sample_weight=sample_weights)
+    model_gpu = train(params_gpu, dtrain_gpu, num_boost_round=params['n_estimators'],)
+    
+
+    print("Predicting...")
+    y_pred = model_gpu.predict(dtest_gpu)-1
+    # print("y_pred: ", y_pred)
+
+    # print("Final smoothed predictions: ", y_pred)
+    hist, bins = np.histogram(y_pred)
+    print("y_pred distribution: ", hist, bins)
+
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+
+    # print("Joining y_series to data_target...")
+    data_target = data_target.join(y_series, how='left')
+
+    print("Backtesting...")
+    # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
+
+    bt = Backtest(data_target,
+        Strategy2_opt_daytrading,
+        cash=100000,
+        spread=0,
+        commission=COMMISSION,
+        margin=1,
+        trade_on_close=False,
+        hedging=False,
+        exclusive_orders=False,
+        finalize_trades=True)
+    stats = bt.run()
+
+    return y_series, stats #, model_gpu
+
+def do_backtest_Strategy2_trading_linear_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+    print("Linear Regression...")
+    # Scale data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    model_linear = LinearRegression()
+    model_linear.fit(X_train_scaled, y_train)
+
+    print("Predicting...")
+    y_pred = (model_linear.predict(X_test_scaled)-1)
+    y_pred = y_pred/(y_pred.max()-y_pred.min())*2
+    print("y_pred: ", y_pred)
+
+    hist, bins = np.histogram(y_pred)
+    print("y_pred distribution: ", hist, bins)
+
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+
+    data_target = data_target.join(y_series, how='left')
+
+    print("Backtesting...")
+
+    bt = Backtest(data_target,
+        Strategy2_opt_daytrading,
+        cash=100000,
+        spread=0,
+        commission=COMMISSION,
+        margin=1,
+        trade_on_close=False,
+        hedging=False,
+        exclusive_orders=False,
+        finalize_trades=True)
+    stats = bt.run()
+
+    return y_series, stats
+
+def do_backtest_Strategy2_trading_logistic_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+    print("Logistic Regression...")
+    # Scale data
+    # scaler = StandardScaler()
+    # X_train_scaled = scaler.fit_transform(X_train)
+    # X_test_scaled = scaler.transform(X_test)
+
+    rand_int = randint(1000000, 2000000)
+    model_logistic = LogisticRegression(max_iter=200, class_weight='balanced', random_state=rand_int)
+    model_logistic.fit(X_train, y_train)
+
+    print("Predicting...")
+    y_pred = model_logistic.predict(X_test)-1
+    
+    print("y_pred: ", y_pred)
+
+    hist, bins = np.histogram(y_pred)
+    print("y_pred distribution: ", hist, bins)
+
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+
+    data_target = data_target.join(y_series, how='left')
+
+    print("Backtesting...")
+
+    bt = Backtest(data_target,
+        Strategy2_opt_daytrading,
+        cash=100000,
+        spread=0,
+        commission=COMMISSION,
+        margin=1,
+        trade_on_close=False,
+        hedging=False,
+        exclusive_orders=False,
+        finalize_trades=True)
+    stats = bt.run()
+
+    return y_series, stats
+
+def do_backtest_Strategy2_trading_ridge_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+    print("Ridge Regression...")
+    # Scale data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    rand_int = randint(1000000, 2000000)
+    model_ridge = Ridge(alpha=1, random_state=rand_int)
+    model_ridge.fit(X_train_scaled, y_train)
+
+    print("Predicting...")
+    y_pred = model_ridge.predict(X_test_scaled)-1
+    print("y_pred: ", y_pred)
+
+    hist, bins = np.histogram(y_pred)
+    print("y_pred distribution: ", hist, bins)
+
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+
+    data_target = data_target.join(y_series, how='left')
+
+    print("Backtesting...")
+
+    bt = Backtest(data_target,
+        Strategy2_opt_daytrading,
+        cash=100000,
+        spread=0,
+        commission=COMMISSION,
+        margin=1,
+        trade_on_close=False,
+        hedging=False,
+        exclusive_orders=False,
+        finalize_trades=True)
+    stats = bt.run()
+
+    return y_series, stats
+
+def do_backtest_Strategy2_trading_lasso_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+    print("Lasso Regression...")
+    rand_int = randint(1000000, 2000000)
+    model_lasso = Lasso(alpha=1, max_iter=1000, random_state=rand_int)
+    model_lasso.fit(X_train, y_train)
+
+    print("Predicting...")
+    y_pred = model_lasso.predict(X_test)-1
+    print("y_pred: ", y_pred)
+
+    hist, bins = np.histogram(y_pred)
+    print("y_pred distribution: ", hist, bins)
+
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+
+    data_target = data_target.join(y_series, how='left')
+
+    print("Backtesting...")
+
+    bt = Backtest(data_target,
+        Strategy2_opt_daytrading,
+        cash=100000,
+        spread=0,
+        commission=COMMISSION,
+        margin=1,
+        trade_on_close=False,
+        hedging=False,
+        exclusive_orders=False,
+        finalize_trades=True)
+    stats = bt.run()
+
+    return y_series, stats
+
+
+def do_backtest_Strategy2_trading_elasticnet_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+
+    # Scale data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    rand_int = randint(1000000, 2000000)
+    model_elasticnet = ElasticNet(alpha=1, l1_ratio=0.5, max_iter=1000, random_state=rand_int)
+    model_elasticnet.fit(X_train_scaled, y_train)
+
+    print("Predicting...")
+    y_pred = model_elasticnet.predict(X_test_scaled)-1
+    print("y_pred: ", y_pred)
+
+    hist, bins = np.histogram(y_pred)
+    print("y_pred distribution: ", hist, bins)
+
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+
+    data_target = data_target.join(y_series, how='left')
+
+    print("Backtesting...")
+
+    bt = Backtest(data_target,
+        Strategy2_opt_daytrading,
+        cash=100000,
+        spread=0,
+        commission=0.00007,
+        margin=1,
+        trade_on_close=False,
+        hedging=False,
+        exclusive_orders=False,
+        finalize_trades=True)
+    stats = bt.run()
+
+    return y_series, stats
+
+
+def do_backtest_Strategy2_trading_svr_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+
+    # Scale data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    model_svr = SVR(kernel='rbf', C=0.5, epsilon=0.2, gamma='scale', cache_size=1000, shrinking=False)
+    model_svr.fit(X_train_scaled, y_train)
+
+    print("svr model: ", model_svr)
+
+    print("Predicting...")
+    y_pred = model_svr.predict(X_test_scaled)-1
+    print("y_pred: ", y_pred)
+
+    hist, bins = np.histogram(y_pred)
+    print("y_pred distribution: ", hist, bins)
+
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+
+    data_target = data_target.join(y_series, how='left')
+
+    print("Backtesting...")
+
+    bt = Backtest(data_target,
+        Strategy2_opt_daytrading,
+        cash=100000,
+        spread=0,
+        commission=COMMISSION,
+        margin=1,
+        trade_on_close=False,
+        hedging=False,
+        exclusive_orders=False,
+        finalize_trades=True)
+    stats = bt.run()
+
+    return y_series, stats
+
+def do_backtest_Strategy2_trading_svc(X_train, X_test, y_train, y_test, data_target, params, weighting):
+
+    # Scale data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    model_svc = SVC(kernel='rbf', C=0.5, gamma='scale', cache_size=1000, shrinking=False)
+    model_svc.fit(X_train_scaled, y_train)
+
+    # print("svc model: ", model_svc)
+
+    print("Predicting...")
+    y_pred = model_svc.predict(X_test_scaled)-1
+    print("y_pred: ", y_pred)
+
+    hist, bins = np.histogram(y_pred)
+    print("y_pred distribution: ", hist, bins)
+
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+
+    data_target = data_target.join(y_series, how='left')
+
+    print("Backtesting...")
+
+    bt = Backtest(data_target,
+        Strategy2_opt_daytrading,
+        cash=100000,
+        spread=0,
+        commission=COMMISSION,
+        margin=1,
+        trade_on_close=False,
+        hedging=False,
+        exclusive_orders=False,
+        finalize_trades=True)
+    stats = bt.run()
+
+    return y_series, stats
 
 # def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target, params, weighting):
 #     rand_int = randint(1000000, 2000000)
@@ -431,10 +781,10 @@ class Strategy2_opt_daytrading(Strategy):
             return
 
         if not self.position:
-            if self.data.y_pred[-1]>=0.5:
+            if self.data.y_pred[-1]>=1:
                 self.buy(size=1, limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1])*self.data.Close[-1], tag=None)
                 return
-            if self.data.y_pred[-1]<=-0.5:
+            if self.data.y_pred[-1]<=-1:
                 self.sell(size=1, limit=None, stop=None, tp=(1-self.data.tp[-1])*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
                 return
 
@@ -518,7 +868,7 @@ def do_backtest_Strategy2_evals(X_train, X_test, y_train, y_test, data_target, p
         Strategy2_opt_evals,
         cash=100000,
         spread=0,
-        commission=0.00008,
+        commission=0.000075,
         margin=1,
         trade_on_close=False,
         hedging=False,
@@ -550,7 +900,7 @@ class Strategy2_opt_evals(Strategy):
                     trade.sl = min(trade.sl or np.inf, self.data.Low[-1] + self.data.sl[-1])
             return
         
-        if self.data.y_pred[-1]>=0.5:
+        if self.data.y_pred[-1]>=1:
             # if self.position.is_short:
             #    self.position.close()
             #    return
@@ -559,7 +909,7 @@ class Strategy2_opt_evals(Strategy):
             self.buy(size=1, limit=None, stop=None, sl=self.data.Close[-1] - self.data.sl[-1], tp=self.data.Close[-1] + self.data.tp[-1], tag=None)
             return
 
-        if self.data.y_pred[-1]<=-0.5:
+        if self.data.y_pred[-1]<=-1:
             # if self.position.is_long:
             #    self.position.close()
             #    return

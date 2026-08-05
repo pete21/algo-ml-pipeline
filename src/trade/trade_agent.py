@@ -17,7 +17,7 @@ from src.trade.model_inference_trade import main as model_inference_trade_main
 
 load_dotenv()
 EXECUTE_ORDER_THRESHOLD = 0.5
-ORDER_PRICE_SHIFT = 0.0003
+ORDER_PRICE_SHIFT = 0.0002
 
 INTERVAL_MINUTES = 5
 SCHEDULE_OFFSET_SECONDS = 5
@@ -26,6 +26,7 @@ CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES = 11 # maximum lifetime of a pending ord
 
 TICKER = 'DAX40'
 ORDER_API_URL = os.getenv('ORDER_API_URL', 'http://localhost:8080/orders')
+INSTRUMENTS_API_URL = os.getenv('INSTRUMENTS_API_URL', 'http://localhost:8080/instruments')
 ORDER_MODE_MARKET = 0
 ORDER_MODE_LIMIT = 1
 ORDER_STAKE = 0.5
@@ -112,6 +113,32 @@ def submit_limit_order(
         logger.error("Limit order request failed: %s", exc)
         raise
 
+# Query /instruments/ticks to get the current price of the ticker
+def get_current_price(ticker: str, side: str) -> float:
+    quote_id = TICKER_MARKET_MAP[ticker]['quoteId']
+    if side not in ['bid', 'ask']:
+        logger.error("Invalid side: %s", side)
+        return None
+    '''
+    Example response:
+    [
+    { "quoteId": 6374, "bid": 24976.4, "ask": 24977.4, "time": 1784884288, "millis": 299},
+    { "quoteId": 16917, "bid": 24976.5, "ask": 24977.5, "time": 1784884288, "millis": 299},
+    ]
+    '''
+    url = f"{INSTRUMENTS_API_URL}/ticks"
+    response = requests.get(url)
+    if response.status_code != 200:
+        logger.error("Failed to get current price for %s: %s", ticker, response.status_code)
+        print(f"Failed to get current price for {ticker}: {response.status_code}")
+        return None
+    json_response = response.json()
+    for item in json_response:
+        if item['quoteId'] == quote_id:
+            return item[side]
+    logger.error("Failed to find quoteId %s in ticks response", quote_id)
+    print(f"Failed to find quoteId {quote_id} in ticks response")
+    return None
 
 def insert_db_marketbroker_order(
     connection: mysql.connector.MySQLConnection,
@@ -150,6 +177,11 @@ def insert_db_marketbroker_order(
         tp = round(price * (1 - tp_factor), 2)
     else:
         raise ValueError(f"Invalid side: {side}")
+
+    # Get the current price of the ticker
+    current_price = get_current_price(ticker, 'ask' if side == 'buy' else 'bid')
+    if current_price is not None:
+        price = (price + current_price) / 2                     # Adjust the price to the average of the current market price and the last closed candle price
 
     price = round(price * (1 - order_side * ORDER_PRICE_SHIFT), 2)
 
@@ -290,12 +322,13 @@ def run_cycle() -> None:
                 if order['created_at'].astimezone(timezone.utc) < datetime.now(tz=timezone.utc) - timedelta(minutes=CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES):
                     cancelled = cancel_pending_order(order['order_id'])
                     if cancelled:
-                        print(f"Updating cancelled order {order['id']}")
+                        print(f"Updating cancelled order {order['id']} because it is older than {CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES} minutes")
                         logger.info("Updating cancelled order %s", order['id'])
-                        update_order_from_marketbroker_response(mysql_connection, order['id'], order['order_id'], True, 'CANCEL_PENDING', error=None)
+                        update_order_from_marketbroker_response(mysql_connection, order['id'], order['order_id'], True, 'CANCEL_PENDING', error={'message': f"Order is {datetime.now(tz=timezone.utc)-order['created_at'].astimezone(timezone.utc)} old (>{CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES} minutes)"})
                         logger.info("Cancelled pending order %s because it is older than %d minutes", order['order_id'], CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES)
                     else:
                         logger.error("Failed to cancel pending order %s", order['order_id'])
+                        print(f"Failed to cancel pending order {order['order_id']}")
 
             logger.info("Skipping order processing: There are pending or opened order(s): %s", open_orders)
             print(f"Skipping order processing: There are pending or opened order(s): {open_orders}")

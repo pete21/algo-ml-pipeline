@@ -1,13 +1,16 @@
-from yaml import YAMLError, safe_load
+import json
 import logging
+from datetime import date
+from json import JSONDecodeError
+
 import numpy as np
 import pandas as pd
-import json
-from json import JSONDecodeError
-from datetime import date
-from src.data_utils.dynamic_features import dynamic_features
 from feature_engine.timeseries.forecasting import LagFeatures
+from yaml import YAMLError, safe_load
+
+from src.data_utils.dynamic_features import dynamic_features
 from src.data_utils.features import calc_kernel_pca
+
 
 def load_params(params_path: str, logger: logging.Logger) -> dict:
     """Load parameters from a YAML file."""
@@ -57,17 +60,20 @@ def get_dates(data: dict, index: int) -> tuple[list, list]:
 
 def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, timeframes: list, scalers: dict, X_cols: list, y_col: str, cutoff_date: date, lags: list, col_open="Open", col_high="High", col_low="Low", col_close="Close") -> tuple[pd.DataFrame, pd.DataFrame, list]:
     cutoff_date_2 = cutoff_date - pd.Timedelta(14, "D")
+
+    X_cols_with_open_high_low_close = list(dict.fromkeys(X_cols + [col_open, col_high, col_low, col_close]))                # Open, High, Low, Close are included in the X_cols_with_open_high_low_close list to avoid duplicate columns in the lag transform
+
     ml_data = {}
     ml_data[index_b] = dynamic_features(data[index_b], parameters, scalers[index_b], col_close=col_close, col_high=col_high, col_low=col_low)
-    ml_data[index_b] = ml_data[index_b][X_cols + [y_col] + [col_open, col_high, col_low, "date_merge", 'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'minute_of_day', 'local_date']].loc[ml_data[index_b].index.date>=cutoff_date_2]
+    ml_data[index_b] = ml_data[index_b][X_cols_with_open_high_low_close + [y_col] + ["date_merge", 'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'minute_of_day', 'local_date']].loc[ml_data[index_b].index.date>=cutoff_date_2]
     print(ml_data[index_b])
     # target = ml_data[index_b].loc[(ml_data[index_b].index.hour>=parameters['hour_range_start']) & (ml_data[index_b].index.hour<=parameters['hour_range_start']+10), [y_col]]
 
-    lag_f = LagFeatures(variables = X_cols + [col_open, col_high, col_low], periods=lags, drop_na=True)
+    lag_f = LagFeatures(variables = X_cols_with_open_high_low_close, periods=lags, drop_na=True)                                 # [col_open, col_high, col_low, col_close] - do not include open, high, low, close in lag transform
 
     for i in indexes_h:
         ml_data[i] = dynamic_features(data[i], p[i], scalers[i], col_close=col_close, col_high=col_high, col_low=col_low)
-        ml_data[i] = ml_data[i][X_cols + [col_open, col_high, col_low, "date_merge"]].loc[ml_data[i].index.date>=cutoff_date_2]
+        ml_data[i] = ml_data[i][X_cols_with_open_high_low_close + ["date_merge"]].loc[ml_data[i].index.date>=cutoff_date_2]
         print(ml_data[i])
         ml_data[i] = lag_f.fit_transform(ml_data[i]).add_suffix(f"_{timeframes[i]}")
         # print(ml_data[i].columns.values)
@@ -99,7 +105,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
     # print("lag columns: ", lag_f.get_feature_names_out())
     # feature_columns.remove(y_col)
     # feature_columns.remove("date_merge")
-    feature_columns = [x for x in lag_f.get_feature_names_out() if x not in ([y_col] + ["date_merge"])]           # [col_open, col_high, col_low, col_close] - exclude open, high, low, close
+    feature_columns = [x for x in lag_f.get_feature_names_out() if x not in ([y_col] + ["date_merge"])]           # without "date_merge", but include open, high, low, close in feature_columns
 
     X_columns = []
     for x in feature_columns:
@@ -112,11 +118,13 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 #                 if timeframe_minutes[i]*int(m) > 240:
 # #                    print(f'Skipped: {x},{timeframes[i]},lag {m}')
 #                     continue
-            if x not in ['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', "local_date", "minute_of_day", col_open, col_high, col_low, col_close]:          # local_date and minute_of_day are excluded because they are not lag features, but are allowed to be in the X_columns, removed before training
+            if x not in ['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', "local_date", "minute_of_day"]:          # local_date and minute_of_day are excluded because they are not lag features, but are allowed to be in the X_columns, removed before training
                 X_columns.append(f"{x}_{timeframes[i]}")
 
-    pca_data = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']-60) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop']+120)]  # pca slice - 60 minutes before and after the hour range
-    dates = np.unique(pca_data['local_date'].dt.date)
+
+    if parameters['pca_ichimoku'] or parameters['pca_kama']:
+        pca_data = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']-60) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop']+120)]  # pca slice - 60 minutes before and after the hour range
+        dates = np.unique(pca_data['local_date'].dt.date)
 
 # PCA
     # print('log_ret_ha_short_pca')                      # ['log_ret_ha_short_pca1','log_ret_ha_short_pca2']
@@ -137,7 +145,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 
     if parameters['pca_ichimoku']:
         print('ichimoku_short_pca')
-        cols = [x for x in X_columns if (x.startswith("tenkan_sen") or x.startswith("kijun_sen")) and not(x.endswith("1h"))]
+        cols = [x for x in X_columns if (x.startswith(("tenkan_sen", "kijun_sen"))) and not(x.endswith("1h"))]
         # print('ichimoku_short_pca cols: ', cols)
         pca_res = calc_kernel_pca(pca_data, dates[1:], 5, cols, ['ichimoku_short_pca1','ichimoku_short_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
@@ -145,7 +153,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
         X_columns.append('ichimoku_short_pca2')
 
         print('ichimoku_long_pca')
-        cols = [x for x in X_columns if (x.startswith("tenkan_sen") or x.startswith("kijun_sen")) and (x.endswith("1h"))]
+        cols = [x for x in X_columns if (x.startswith(("tenkan_sen", "kijun_sen"))) and (x.endswith("1h"))]
         # print('ichimoku_long_pca cols: ', cols)
         pca_res = calc_kernel_pca(pca_data, dates[1:], 5, cols, ['ichimoku_long_pca1','ichimoku_long_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
@@ -164,7 +172,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 
     if parameters['pca_kama']:
         print('kama_short_pca')
-        cols = [x for x in X_columns if (x.startswith("kama_trend_slow_diff") or x.startswith("kama_trend_fast_diff")) and not (x.endswith("1h"))]
+        cols = [x for x in X_columns if (x.startswith(("kama_trend_slow_diff", "kama_trend_fast_diff"))) and not (x.endswith("1h"))]
         pca_res = calc_kernel_pca(pca_data, dates[1:], 5, cols, ['kama_short_pca1','kama_short_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
         X_columns.append('kama_short_pca1')
@@ -172,7 +180,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
     #    X_columns = [x for x in X_columns if x not in cols]
 
         print('kama_long_pca')
-        cols = [x for x in X_columns if (x.startswith("kama_trend_slow_diff") or x.startswith("kama_trend_fast_diff")) and (x.endswith("1h"))]
+        cols = [x for x in X_columns if (x.startswith(("kama_trend_slow_diff", "kama_trend_fast_diff"))) and (x.endswith("1h"))]
         pca_res = calc_kernel_pca(pca_data, dates[1:], 5, cols, ['kama_long_pca1','kama_long_pca2'])
         ml_data[index_b]=ml_data[index_b].join(pca_res)
         X_columns.append('kama_long_pca1')

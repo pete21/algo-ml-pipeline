@@ -1,11 +1,14 @@
-import logging
-import mlflow
-import os
 import json
+import logging
+import os
+
 import matplotlib
+import mlflow
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pandas as pd
+from dotenv import load_dotenv
 from mlflow.tracking import MlflowClient
 
 from src.data_utils.utils import load_params
@@ -15,7 +18,6 @@ from src.model.mlflow_utils import (
     load_model_params_from_experiment,
     search_positive_value_runs,
 )
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -115,6 +117,7 @@ def save_model_param_histograms(
     os.makedirs(output_dir, exist_ok=True)
     saved_paths = []
 
+    optimisation_score_max = max([positive_value_run_param.get("metrics.optimisation_score") for positive_value_run_param in positive_value_run_params])
     for name in model_param_names:
         col = f"params.{name}"
         print(f"Param column: {col}")
@@ -140,7 +143,7 @@ def save_model_param_histograms(
                     color="#d62728",
                     linestyle="--",
                     linewidth=2,
-                    label="model_params artifact",
+                    label="model_params",
                 )
         else:
             counts = series.astype(str).value_counts().sort_index()
@@ -156,7 +159,7 @@ def save_model_param_histograms(
                         color="#d62728",
                         linestyle="--",
                         linewidth=2,
-                        label="model_params artifact",
+                        label="model_params",
                     )
 
         for positive_value_run_param in positive_value_run_params:
@@ -167,7 +170,7 @@ def save_model_param_histograms(
                     color="#2ca02c",
                     linestyle="--",
                     linewidth=1,
-                    ymax=0.9,                                       # optimisation_score / max(optimisation_score)
+                    ymax=(positive_value_run_param.get("metrics.optimisation_score")/optimisation_score_max)**2,         # optimisation_score / max(optimisation_score)
                 )
 
         # if ax.get_legend_handles_labels()[0]:
@@ -242,7 +245,7 @@ def main():
 
     runs = mlflow.search_runs(
         experiment_ids=[experiment.experiment_id],
-        filter_string=f"run_name = 'Evaluation'",
+        filter_string="run_name = 'Evaluation'",
     )
     if runs.empty:
         raise ValueError(

@@ -160,7 +160,7 @@ classifier =  RC_model(**config)
 
 print("Training the model...")
 # Train the model
-tr_time = classifier.fit(X_train, y_train) 
+tr_time = classifier.fit(X_train, y_train)
 
 print("Computing predictions on test data...")
 # Compute predictions on test data

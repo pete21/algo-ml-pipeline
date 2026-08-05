@@ -1,20 +1,23 @@
-import dvc.api
-import numpy as np
-import pandas as pd
-import logging
-import mlflow
-import os
 # import matplotlib.pyplot as plt
 # import seaborn as sns
 import json
-from datetime import date
+import logging
+import os
+
+import dvc.api
+import mlflow
+import numpy as np
+import pandas as pd
+from dotenv import load_dotenv
 from mlflow.tracking import MlflowClient
 
 from src.backtesting.optimization import objective
 from src.data_utils.utils import get_dates
-from src.model.mlflow_utils import find_latest_experiment, load_model_params_from_experiment, save_model_params
+from src.model.mlflow_utils import (
+    find_latest_experiment,
+    load_model_params_from_experiment,
+)
 from src.model.model_building import load_data
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -86,7 +89,7 @@ def main():
     # Load the preprocessed data from the interim directory
     data = load_data(data_path=params['data_path'], params=params)
     
-    cutoff_date = date(2021,8,1)
+    cutoff_date = data[params['index_base']].index.date.min()+pd.Timedelta(30, "D")
     for d in data:
         data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
     _, unique_weekdates = get_dates(data, params['index_base'])
@@ -105,9 +108,9 @@ def main():
     print(f"Optimisation score: {optimisation_score}")
 
 
-    print(f"Searching for run_id with run name: Evaluation")
+    print("Searching for run_id with run name: Evaluation")
     # get run_id with run name 
-    run_object = mlflow.search_runs(filter_string=f"run_name = 'Evaluation'")
+    run_object = mlflow.search_runs(filter_string="run_name = 'Evaluation'")
     run_id = run_object["run_id"][0]
 
     # tags = {
