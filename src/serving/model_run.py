@@ -7,13 +7,11 @@ from src.serving.model_serving import ServingState, build_serving_app
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-MODEL_NAME = os.getenv("MODEL_NAME")
-MODEL_DATE = os.getenv("MODEL_DATE", "20260525")
-REGISTERED_MODEL_NAME = os.getenv("REGISTERED_MODEL_NAME", f"{MODEL_NAME}_{MODEL_DATE}")
+REGISTERED_MODEL_NAME = os.getenv("REGISTERED_MODEL_NAME", "svr_regression_v1_20260727")
 MODEL_VERSION_ALIAS = os.getenv("MODEL_VERSION_ALIAS", "Staging")
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000/")
 HOST = "0.0.0.0"
-PORT = 8000
+PORT = int(os.getenv("PORT", "8100"))
 
 state = ServingState.from_registered_model(
     tracking_uri=MLFLOW_TRACKING_URI,

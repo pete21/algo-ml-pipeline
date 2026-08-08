@@ -151,7 +151,7 @@ def save_model_params(model_params: dict, file_path: str, logger: logging.Logger
         if logger:
             logger.debug('Model parameters saved to %s', file_path)
         else:
-            print('Model parameters saved to %s', file_path)
+            print(f'Model parameters saved to {file_path}')
     except Exception as e:
         if logger:
             logger.error('Error occurred while saving the model parameters: %s', e)

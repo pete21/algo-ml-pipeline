@@ -95,7 +95,6 @@ model_building:
     'ppo',
     'upperband_r',
     'sar_r',
-
     #'ha_slope_15',
     'stochd',
     'kama_diff',
@@ -156,11 +155,11 @@ model_building:
   col_y: ['labeling_multi']
   lags: [1,2]
   version: 1
-  model_name: 'svr_model_v{version}'
+  model_type: 'svr_regression'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 500
+  n_trials: 10
   num_splits: 25
-  note: 'svr-dax-pipeline'
+  project_name: 'svr-dax-pipeline'
   evals_strategy: False
   local_timezone: 'Europe/Berlin'
 
@@ -170,7 +169,7 @@ model_evaluation:
 
 model_registration:
   dummy: True
-
+  model_tag: 'Staging'
 
 model_analysis:
   target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor', 'total_trades']

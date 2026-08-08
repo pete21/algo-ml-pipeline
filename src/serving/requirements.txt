@@ -10,3 +10,4 @@ scipy
 uvicorn[standard]
 xgboost
 lightgbm
+joblib

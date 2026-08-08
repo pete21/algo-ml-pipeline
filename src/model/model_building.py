@@ -170,7 +170,7 @@ def main():
         unique_dates, unique_weekdates = get_dates(data, params['index_base'])
         cutoff_date = data[params['index_base']].index.date.min()+pd.Timedelta(21, "D")
 
-        experiment_name = f'{params["note"]}-v{params["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+        experiment_name = f'{params["project_name"]}-v{params["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
         if params['evals_strategy']:
             experiment_name += '-evals'
         else:
@@ -210,12 +210,12 @@ def main():
             mlflow.log_metric('best', True)
 
         tags = {
-            "project_name": params['note'],
+            "project_name": params['project_name'],
             "stage": "building",
-            "mlflow.note.content": params['note'],
+            "mlflow.note.content": f"Project name: {params['project_name']}",
             "optimizer": "optuna",
-            "model_family": "svr",
-            "model_name": params['model_name'],
+            "model_family": params['model_type'],
+            "model_name": params['model_type'] + '_v' + str(params['version']),
             "best_trial_number": study.best_trial.number,
             "best_run_name": f"Trial_{study.best_trial.number}",
             "best_run_id": run_id,

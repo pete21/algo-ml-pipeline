@@ -220,5 +220,5 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
     X = ml_data[index_b][X_columns]
     y = ml_data[index_b][y_col]
     #print(lag_f.get_feature_names_out())
-    X.fillna(0,inplace=True)
+    X = X.fillna(0)
     return X, y, X_columns

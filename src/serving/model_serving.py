@@ -1,20 +1,22 @@
+import datetime
 import json
-import os
 import threading
-from typing import Any, Optional, Type
+from typing import Any
 
+import joblib
 import mlflow
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from mlflow import MlflowClient
+from mlflow.entities.model_registry import ModelVersion
 from mlflow.models import get_model_info
+from mlflow.models.model import ModelInfo
 from pydantic import BaseModel, Field, ValidationError, create_model
-from xgboost import DMatrix
 
 
 class TabularPredictRequest(BaseModel):
     columns: list[str]
-    data: list[list[Any]]
+    data: list[list[int|float|bool|str|datetime.datetime]]
 
 
 class LoadModelRequest(BaseModel):
@@ -37,12 +39,12 @@ MLFLOW_TYPE_MAP = {
 def create_pydantic_model_from_signature(
     schema: mlflow.types.schema.Schema,
     model_name: str,
-) -> Type[BaseModel]:
+) -> type[BaseModel]:
     """Build a Pydantic model from an MLflow input schema for OpenAPI/Swagger docs."""
     if schema is None or len(schema.inputs) == 0:
         raise ValueError("The model does not have an input signature defined.")
 
-    fields_spec: dict[str, Any] = {}
+    fields_spec: dict[str, int|float|bool|str|datetime.datetime] = {}
     for column in schema.inputs:
         mlflow_type = column.type.name if hasattr(column.type, "name") else str(column.type)
         python_type = MLFLOW_TYPE_MAP.get(mlflow_type, float)
@@ -55,8 +57,8 @@ def create_pydantic_model_from_signature(
 
 
 def _build_signature_models(
-    model_info: Any,
-) -> tuple[Type[BaseModel], Type[BaseModel], list[str]]:
+    model_info: ModelInfo,
+) -> tuple[type[BaseModel], type[BaseModel], list[str]]:
     if model_info.signature is None or model_info.signature.inputs is None:
         raise ValueError("Model signature inputs are required for serving.")
 
@@ -76,7 +78,7 @@ def load_registered_model(
     tracking_uri: str,
     registered_model_name: str,
     model_version_alias: str,
-) -> tuple[Any, Any, str, Any, dict, Optional[dict]]:
+) -> tuple[any, ModelInfo | None, str, ModelVersion | None, dict, dict | None, any]:
     """Load a registered MLflow XGBoost model and its metadata."""
     client = MlflowClient(tracking_uri=tracking_uri)
     try:
@@ -86,43 +88,61 @@ def load_registered_model(
         )
     except Exception as e:
         print(f"Error getting model version by alias: {e}")
-        return None, None, None, None, {}, {}
+        return None, None, None, None, {}, None, None
         # raise ValueError(f"Error getting model version by alias: {e}")
 
     model_uri = model_version_info.source
-    model_info = get_model_info(model_uri)
-    model = mlflow.xgboost.load_model(model_uri)
+    run_id = model_version_info.run_id
 
-    model_params = {}
-    artifact_dir = mlflow.artifacts.download_artifacts(
-        run_id=model_version_info.run_id,
-        artifact_path="model_params",
-    )
-    json_files = [
-        os.path.join(artifact_dir, filename)
-        for filename in os.listdir(artifact_dir)
-        if filename.endswith(".json")
-    ]
-    if not json_files:
-        raise ValueError(
-            f"No JSON model_params artifact found for run_id={model_version_info.run_id}"
-        )
-    with open(json_files[0], "r", encoding="utf-8") as file:
-        model_params = json.load(file)
+    model_info = get_model_info(model_uri)
+    model = mlflow.sklearn.load_model(model_uri)
+
+    model_params = model_info.params
+    # artifact_dir = mlflow.artifacts.download_artifacts(
+    #     run_id=run_id,
+    #     artifact_path="model_params",
+    # )
+    # json_files = [
+    #     os.path.join(artifact_dir, filename)
+    #     for filename in os.listdir(artifact_dir)
+    #     if filename.endswith(".json")
+    # ]
+    # if not json_files:
+    #     raise ValueError(
+    #         f"No JSON model_params artifact found for run_id={run_id}"
+    #     )
+    # with open(json_files[0], "r", encoding="utf-8") as file:
+    #     model_params = json.load(file)
+
+
+    # # 1. Zbuduj URI zarejestrowanego modelu
+    # model_uri = f"models://{MODEL_NAME}/{MODEL_VERSION}"
+
+    # # 2. Załaduj przykład wejściowy bezpośrednio z MLflow
+    # # Funkcja automatycznie pobierze plik i zwróci go w formacie tekstowym/słownikowym
+    # input_example = mlflow.models.load_input_example(model_uri)
 
     example_data = None
     if model_info.saved_input_example_info:
         artifact_path = model_info.saved_input_example_info["artifact_path"]
-        model_name = os.getenv("MODEL_NAME", "model")
-        path = f"{model_name}/{artifact_path}"
+        path = f"{registered_model_name}/{artifact_path}"
         local_path = client.download_artifacts(
-            run_id=model_version_info.run_id,
+            run_id=run_id,
             path=path,
         )
         with open(local_path, "r", encoding="utf-8") as file:
             example_data = json.load(file)
 
-    return model, model_info, model_uri, model_version_info, model_params, example_data
+    scaler_name = model_params.get("scaler", None)
+    if scaler_name is not None:
+        scaler_path = client.download_artifacts(
+            run_id=run_id,
+            path=f"preprocessing/{scaler_name}",
+        )
+        scaler = joblib.load(scaler_path)
+    else:
+        scaler = None
+    return model, model_info, model_uri, model_version_info, model_params, example_data, scaler
 
 
 class ServingState:
@@ -131,16 +151,17 @@ class ServingState:
     def __init__(self, tracking_uri: str):
         self.tracking_uri = tracking_uri
         self._lock = threading.Lock()
-        self.model: Any = None
-        self.model_info: Any = None
+        self.model: any = None
+        self.model_info: ModelInfo | None = None
         self.model_uri: str = ""
         self.registered_model_name: str = ""
-        self.model_version_info: Any = None
+        self.model_version_info: ModelVersion | None = None
         self.model_params: dict = {}
-        self.example_data: Optional[dict] = None
+        self.example_data: dict | None = None
         self.input_names: list[str] = []
-        self.input_model: Optional[Type[BaseModel]] = None
-        self.batch_input_model: Optional[Type[BaseModel]] = None
+        self.input_model: type[BaseModel] | None = None
+        self.batch_input_model: type[BaseModel] | None = None
+        self.scaler: any = None
 
     @classmethod
     def from_registered_model(
@@ -156,12 +177,13 @@ class ServingState:
     def _set_loaded_model(
         self,
         registered_model_name: str,
-        model: Any,
-        model_info: Any,
+        model: any,
+        model_info: ModelInfo | None,
         model_uri: str,
-        model_version_info: Any,
+        model_version_info: ModelVersion | None,
         model_params: dict,
-        example_data: Optional[dict],
+        example_data: dict | None,
+        scaler: any,
     ) -> None:
         if model_info is not None:
             input_model, batch_input_model, input_names = _build_signature_models(model_info)
@@ -179,6 +201,7 @@ class ServingState:
         self.input_names = input_names
         self.input_model = input_model
         self.batch_input_model = batch_input_model
+        self.scaler = scaler
 
     def load_model(self, registered_model_name: str, model_version_alias: str) -> dict[str, Any]:
         """Load a registered model and replace the active serving configuration."""
@@ -216,8 +239,11 @@ class ServingState:
                     status_code=422,
                     detail=f"Missing input features: {sorted(missing_columns)}",
                 )
-            ordered_df = df[self.input_names]
-            predictions = self.model.predict(DMatrix(ordered_df))
+            if self.scaler is not None:
+                scaled_data = self.scaler.transform(df[self.input_names])
+                predictions = self.model.predict(scaled_data)
+            else:
+                predictions = self.model.predict(df[self.input_names])
         return predictions.tolist()
 
 
@@ -279,10 +305,14 @@ def build_serving_app(state: ServingState) -> FastAPI:
         if state.model_info is not None:
             app.title = f"MLflow Model Serving: {state.registered_model_name}"
             app.version = str(state.model_version_info.version)
-            return {"status": "ok", **config}
         else:
             app.title = "MLflow Model Serving - missing model info"
-            return {"status": "error", **config}
+            app.version = "0"
+        # Invalidate cached OpenAPI so /docs and /openapi.json pick up title/version.
+        app.openapi_schema = None
+        if state.model_info is not None:
+            return {"status": "ok", **config}
+        return {"status": "error", **config}
 
     @app.post("/predict")
     def predict(payload: TabularPredictRequest) -> dict[str, Any]:

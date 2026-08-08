@@ -1,14 +1,9 @@
-# import cudf
-# import cupy as cp
 
 from random import randint
 
 # import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from backtesting.lib import Strategy
-
-# from xgboost import XGBClassifier
 from scipy.special import softmax
 from sklearn.linear_model import (
     ElasticNet,
@@ -23,8 +18,10 @@ from sklearn.utils.class_weight import compute_sample_weight
 from xgboost import DMatrix, train
 
 from backtesting import Backtest
-
-# from scipy.sparse import csr_matrix
+from src.backtesting.backtesting_strategies import (
+    Daytrading_strategy,
+    Trailing_drawdown_strategy,
+)
 
 COMMISSION = 0.00006
 
@@ -198,12 +195,6 @@ def viterbi_price_decoder(emission_probs, penalty=1.0):
 
 
 
-
-# # Set strict thresholds for execution
-# BUY_THRESHOLD = 0.5   # Must be 45% confident it goes Up
-# SELL_THRESHOLD = 0.5  # Must be 45% confident it goes Down
-# FLAT_MAX = 0.25        # Cannot be more than 25% confident it stays Flat
-
 # EMPTY_STATS = {
 #     'Start': datetime.now(),
 #     'End': None,
@@ -243,9 +234,9 @@ def viterbi_price_decoder(emission_probs, penalty=1.0):
 # }
 
 
-######################################################## DAYTRADING STRATEGY ########################################################
+######################################################## STRATEGIES ########################################################
 
-def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target, params, weighting):
+def do_backtest_Strategy_xgb_classification(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
     rand_int = randint(1000000, 2000000)
     params_gpu = {
         'num_class': 3, 'device': 'gpu',
@@ -266,7 +257,6 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
         y=y_train
     )
     dtrain_gpu = DMatrix(X_train, label=y_train, weight=sample_weights)
-    dtest_gpu = DMatrix(X_test)
 
     # Define evaluation list to monitor both sets
     # evals_result = {}
@@ -282,7 +272,7 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
     # print("X_train: ", X_train.shape)
     # print("X_test: ", X_test.shape)
     # print("data_target: ", data_target.shape)
-    # print("weighting: ", weighting)
+    # print("weighting: ")
 
     print("Training model...")
     model_gpu = train(params_gpu, dtrain_gpu, num_boost_round=params['n_estimators'],
@@ -291,6 +281,11 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
         # evals=watchlist,
         # evals_result=evals_result
         )
+    
+    if X_test is None:
+        return model_gpu, None
+    dtest_gpu = DMatrix(X_test)
+
     # importance_scores = model_gpu.get_score(importance_type='weight')
     # sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
     # json.dump( sorted_by_values, open( f'importance_scores_optim_{rand_int}.json', 'w' ) )
@@ -366,7 +361,7 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
     # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
 
     bt = Backtest(data_target,
-        Strategy2_opt_daytrading,
+        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -377,10 +372,11 @@ def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target,
         finalize_trades=True)
     stats = bt.run()
 
-    return y_series, stats #, model_gpu
+    return y_series, stats
 
 
-def do_backtest_Strategy2_trading_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+
+def do_backtest_Strategy_xgb_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
     rand_int = randint(1000000, 2000000)
     params_gpu = {
         'device': 'gpu',
@@ -406,14 +402,15 @@ def do_backtest_Strategy2_trading_regression(X_train, X_test, y_train, y_test, d
     # X_test_scaled = scaler.transform(X_test)
 
     dtrain_gpu = DMatrix(X_train, label=y_train, weight=sample_weights)
-    dtest_gpu = DMatrix(X_test)
-
 
     print("Training model...")
     # model_gpu = XGBRegressor(**params_gpu)
     # model_gpu.fit(X_train, y_train, sample_weight=sample_weights)
     model_gpu = train(params_gpu, dtrain_gpu, num_boost_round=params['n_estimators'],)
     
+    if X_test is None:
+        return model_gpu, None
+    dtest_gpu = DMatrix(X_test)
 
     print("Predicting...")
     y_pred = model_gpu.predict(dtest_gpu)-1
@@ -432,7 +429,7 @@ def do_backtest_Strategy2_trading_regression(X_train, X_test, y_train, y_test, d
     # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
 
     bt = Backtest(data_target,
-        Strategy2_opt_daytrading,
+        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -445,16 +442,19 @@ def do_backtest_Strategy2_trading_regression(X_train, X_test, y_train, y_test, d
 
     return y_series, stats #, model_gpu
 
-def do_backtest_Strategy2_trading_linear_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+def do_backtest_Strategy_linear_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
     print("Linear Regression...")
     # Scale data
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
 
     model_linear = LinearRegression()
     model_linear.fit(X_train_scaled, y_train)
 
+    if X_test is None:
+        return model_linear, scaler
+    X_test_scaled = scaler.transform(X_test)
+    
     print("Predicting...")
     y_pred = (model_linear.predict(X_test_scaled)-1)
     y_pred = y_pred/(y_pred.max()-y_pred.min())*2
@@ -470,7 +470,7 @@ def do_backtest_Strategy2_trading_linear_regression(X_train, X_test, y_train, y_
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Strategy2_opt_daytrading,
+        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -483,7 +483,7 @@ def do_backtest_Strategy2_trading_linear_regression(X_train, X_test, y_train, y_
 
     return y_series, stats
 
-def do_backtest_Strategy2_trading_logistic_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+def do_backtest_Strategy_logistic_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
     print("Logistic Regression...")
     # Scale data
     # scaler = StandardScaler()
@@ -494,6 +494,9 @@ def do_backtest_Strategy2_trading_logistic_regression(X_train, X_test, y_train, 
     model_logistic = LogisticRegression(max_iter=200, class_weight='balanced', random_state=rand_int)
     model_logistic.fit(X_train, y_train)
 
+    if X_test is None:
+        return model_logistic, None
+    
     print("Predicting...")
     y_pred = model_logistic.predict(X_test)-1
     
@@ -509,7 +512,7 @@ def do_backtest_Strategy2_trading_logistic_regression(X_train, X_test, y_train, 
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Strategy2_opt_daytrading,
+        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -522,17 +525,20 @@ def do_backtest_Strategy2_trading_logistic_regression(X_train, X_test, y_train, 
 
     return y_series, stats
 
-def do_backtest_Strategy2_trading_ridge_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+def do_backtest_Strategy_ridge_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
     print("Ridge Regression...")
     # Scale data
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
 
     rand_int = randint(1000000, 2000000)
     model_ridge = Ridge(alpha=1, random_state=rand_int)
     model_ridge.fit(X_train_scaled, y_train)
 
+    if X_test is None:
+        return model_ridge, scaler
+    X_test_scaled = scaler.transform(X_test)
+    
     print("Predicting...")
     y_pred = model_ridge.predict(X_test_scaled)-1
     print("y_pred: ", y_pred)
@@ -547,7 +553,7 @@ def do_backtest_Strategy2_trading_ridge_regression(X_train, X_test, y_train, y_t
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Strategy2_opt_daytrading,
+        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -560,12 +566,15 @@ def do_backtest_Strategy2_trading_ridge_regression(X_train, X_test, y_train, y_t
 
     return y_series, stats
 
-def do_backtest_Strategy2_trading_lasso_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+def do_backtest_Strategy_lasso_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
     print("Lasso Regression...")
     rand_int = randint(1000000, 2000000)
     model_lasso = Lasso(alpha=1, max_iter=1000, random_state=rand_int)
     model_lasso.fit(X_train, y_train)
 
+    if X_test is None:
+        return model_lasso, None
+    
     print("Predicting...")
     y_pred = model_lasso.predict(X_test)-1
     print("y_pred: ", y_pred)
@@ -580,7 +589,7 @@ def do_backtest_Strategy2_trading_lasso_regression(X_train, X_test, y_train, y_t
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Strategy2_opt_daytrading,
+        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -594,17 +603,20 @@ def do_backtest_Strategy2_trading_lasso_regression(X_train, X_test, y_train, y_t
     return y_series, stats
 
 
-def do_backtest_Strategy2_trading_elasticnet_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+def do_backtest_Strategy_elasticnet_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
 
     # Scale data
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
 
     rand_int = randint(1000000, 2000000)
     model_elasticnet = ElasticNet(alpha=1, l1_ratio=0.5, max_iter=1000, random_state=rand_int)
     model_elasticnet.fit(X_train_scaled, y_train)
 
+    if X_test is None:
+        return model_elasticnet, scaler
+    X_test_scaled = scaler.transform(X_test)
+    
     print("Predicting...")
     y_pred = model_elasticnet.predict(X_test_scaled)-1
     print("y_pred: ", y_pred)
@@ -619,10 +631,10 @@ def do_backtest_Strategy2_trading_elasticnet_regression(X_train, X_test, y_train
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Strategy2_opt_daytrading,
+        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
-        commission=0.00007,
+        commission=COMMISSION,
         margin=1,
         trade_on_close=False,
         hedging=False,
@@ -633,16 +645,19 @@ def do_backtest_Strategy2_trading_elasticnet_regression(X_train, X_test, y_train
     return y_series, stats
 
 
-def do_backtest_Strategy2_trading_svr_regression(X_train, X_test, y_train, y_test, data_target, params, weighting):
+def do_backtest_Strategy_svr_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
 
     # Scale data
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
 
     model_svr = SVR(kernel='rbf', C=0.5, epsilon=0.2, gamma='scale', cache_size=1000, shrinking=False)
     model_svr.fit(X_train_scaled, y_train)
 
+    if X_test is None:
+        return model_svr, scaler
+    X_test_scaled = scaler.transform(X_test)
+    
     print("svr model: ", model_svr)
 
     print("Predicting...")
@@ -659,7 +674,7 @@ def do_backtest_Strategy2_trading_svr_regression(X_train, X_test, y_train, y_tes
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Strategy2_opt_daytrading,
+        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -672,16 +687,19 @@ def do_backtest_Strategy2_trading_svr_regression(X_train, X_test, y_train, y_tes
 
     return y_series, stats
 
-def do_backtest_Strategy2_trading_svc(X_train, X_test, y_train, y_test, data_target, params, weighting):
+def do_backtest_Strategy_svc_classification(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
 
     # Scale data
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
 
     model_svc = SVC(kernel='rbf', C=0.5, gamma='scale', cache_size=1000, shrinking=False)
     model_svc.fit(X_train_scaled, y_train)
 
+    if X_test is None:
+        return model_svc, scaler
+    X_test_scaled = scaler.transform(X_test)
+    
     # print("svc model: ", model_svc)
 
     print("Predicting...")
@@ -698,7 +716,7 @@ def do_backtest_Strategy2_trading_svc(X_train, X_test, y_train, y_test, data_tar
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Strategy2_opt_daytrading,
+        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -710,318 +728,3 @@ def do_backtest_Strategy2_trading_svc(X_train, X_test, y_train, y_test, data_tar
     stats = bt.run()
 
     return y_series, stats
-
-# def do_backtest_Strategy2_trading(X_train, X_test, y_train, y_test, data_target, params, weighting):
-#     rand_int = randint(1000000, 2000000)
-#     model_xgb = XGBClassifier(num_class=3, device='gpu',
-#                     learning_rate=params['learning_rate'],
-#                     n_estimators=params['n_estimators'],
-#                     max_depth=params['max_depth'],
-#                     subsample=params['subsample'],
-#                     gamma=params['gamma'],
-#                     objective='multi:softprob',
-#                     random_state=rand_int,
-#                     # early_stopping_rounds=10,
-#                     eval_metric='merror',
-#                     # min_delta=0.01,
-#                     # num_leaves=params['num_leaves'],
-#                     # feature_fraction=params['feature_fraction']
-#                     )                   # model
-
-#     sample_weights = compute_sample_weight(
-#         class_weight='balanced',
-#         y=y_train
-#     )
-
-#     model_xgb.fit(X_train, y_train, sample_weight=sample_weights)                           # cp.array(X_train)
-#     y_pred = model_xgb.predict(X_test)
-
-#     y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
-
-#     data_target = data_target.join(y_series)
-
-# #    data_target.to_csv('data_target_optim_1.csv')
-
-#     bt = Backtest(data_target,
-#         Strategy2_opt_daytrading,
-#         cash=100000,
-#         spread=0,
-#         commission=0.0001,
-#         margin=1,
-#         trade_on_close=False,
-#         hedging=False,
-#         exclusive_orders=True,
-#         finalize_trades=True)
-#     stats = bt.run()
-#     profit = stats['Equity Final [$]']-100000
-# #    print(stats)
-# #    scores.append(profit)
-# #    sharpe.append(stats['Sharpe Ratio'])
-# #    sortino.append(stats['Sortino Ratio'])
-# #    calmar.append(stats['Calmar Ratio'])
-
-#     return profit, stats['Sharpe Ratio'], stats['Sortino Ratio'], stats['Calmar Ratio'], y_series
-
-
-class Strategy2_opt_daytrading(Strategy):
-
-    def init(self):
-        # In init() and in next() it is important to call the
-        # super method to properly initialize the parent classes
-        super().init()
-
-        # Set trailing stop-loss to 2x ATR using
-        # the method provided by `TrailingStrategy`
-#        self.set_trailing_sl(2)
-    def next(self):
-#        print(self.data.df['labeling_multi'].iloc[-1])
-        if self.data.DaytradingExit[-1]:
-            if self.position:      # daytrading
-                self.position.close()
-            return
-
-        if not self.position:
-            if self.data.y_pred[-1]>=1:
-                self.buy(size=1, limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1])*self.data.Close[-1], tag=None)
-                return
-            if self.data.y_pred[-1]<=-1:
-                self.sell(size=1, limit=None, stop=None, tp=(1-self.data.tp[-1])*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
-                return
-
-        # else:   # if there is position
-
-        #     if self.position.pl_pct >= 0.002: # if profit percentage is greater than 0.15%, adjust stop-loss to sl/2 from current price (~ break even price)
-        #         for trade in self.trades:
-        #             if trade.is_long:
-        #                 trade.sl = max(trade.sl or -np.inf, (1-self.data.sl[-1]/2)*self.data.Close[-1])
-        #             elif trade.is_short:
-        #                 trade.sl = min(trade.sl or np.inf, (1+self.data.sl[-1]/2)*self.data.Close[-1])
-
-            # if self.position.pl_pct >= 0.0015: # if profit percentage is greater than 0.2%, open addon trade with half SL and half TP
-            #     if self.data.y_pred[-1]>0.5 and self.position.size == 1:
-            #         self.buy(size=1, limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1]/2)*self.data.Close[-1], tag=None)
-            #     elif self.data.y_pred[-1]<-0.5 and self.position.size == -1:
-            #         self.sell(size=1, limit=None, stop=None, tp=(1-self.data.tp[-1]/2)*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
-
-
-######################################################## EVALS STRATEGY ########################################################
-
-
-def do_backtest_Strategy2_evals(X_train, X_test, y_train, y_test, data_target, params, weighting):
-    rand_int = randint(1000000, 2000000)
-    params_gpu = {
-        'num_class': 3, 'device': 'gpu',
-        'learning_rate': params['learning_rate'],
-        # 'n_estimators': params['n_estimators'],
-        'max_depth': params['max_depth'],
-        'subsample': params['subsample'],
-        'gamma': params['gamma'],
-        'objective': 'multi:softprob',
-        'seed': rand_int,
-        'eval_metric': ['mlogloss', 'merror'],
-        # 'verbose_eval': 1000
-    }
-
-    sample_weights = compute_sample_weight(
-        class_weight='balanced',
-        y=y_train
-    )
-    dtrain_gpu = DMatrix(X_train, label=y_train, weight=sample_weights)
-    dtest_gpu = DMatrix(X_test, label=y_test)
-    # print("dtrain_gpu: ", dtrain_gpu.shape)
-    # print("dtest_gpu: ", dtest_gpu.shape)
-    # print("sample_weights: ", sample_weights.shape)
-    # print("y_train: ", y_train.shape)
-    # print("y_test: ", y_test.shape)
-    # print("X_train: ", X_train.shape)
-    # print("X_test: ", X_test.shape)
-    # print("data_target: ", data_target.shape)
-    # print("weighting: ", weighting)
-
-    print("Training model...")
-    model_gpu = train(params_gpu, dtrain_gpu, num_boost_round=params['n_estimators'])
-    # importance_scores = model_gpu.get_score(importance_type='weight')
-    # sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
-    # json.dump( sorted_by_values, open( f'importance_scores_optim_{rand_int}.json', 'w' ) )
-
-    # if X_test.count() < 5:
-    #     return pd.Series(np.zeros(X_test.count()), index=X_test.index, name="y_pred"), EMPTY_STATS, model_gpu
-
-    print("Predicting...")
-    y_pred = model_gpu.predict(dtest_gpu)
-    # print("y_pred: ", y_pred)
-    # print("Predicted.")
-    # print("Creating y_series...")
-    y_pred_expected = np.matmul(y_pred, MULTI_CLASS_VALUES)
-    # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
-    # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=params['pred_avg_period'], min_periods=1).mean()
-    y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
-
-
-    print("Joining y_series to data_target...")
-    data_target = data_target.join(y_series, how='left')
-
-    print("Backtesting...")
-    # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
-
-    bt = Backtest(data_target,
-        Strategy2_opt_evals,
-        cash=100000,
-        spread=0,
-        commission=0.000075,
-        margin=1,
-        trade_on_close=False,
-        hedging=False,
-        exclusive_orders=True,
-        finalize_trades=True)
-    stats = bt.run()
-
-    return y_series, stats #, model_gpu
-
-
-
-class Strategy2_opt_evals(Strategy):
-
-    def init(self):
-        # In init() and in next() it is important to call the
-        # super method to properly initialize the parent classes
-        super().init()
-
-    def next(self):
-
-        if self.position:
-            if self.data.DaytradingExit[-1]:
-                self.position.close()
-                return
-            for trade in self.trades:
-                if trade.is_long:
-                    trade.sl = max(trade.sl or -np.inf, self.data.High[-1] - self.data.sl[-1])
-                elif trade.is_short:
-                    trade.sl = min(trade.sl or np.inf, self.data.Low[-1] + self.data.sl[-1])
-            return
-        
-        if self.data.y_pred[-1]>=1:
-            # if self.position.is_short:
-            #    self.position.close()
-            #    return
-            # if not self.position:
-#                self.buy(size=math.floor(100000/self.data.Close[-1]), limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1])*self.data.Close[-1], tag=None)
-            self.buy(size=1, limit=None, stop=None, sl=self.data.Close[-1] - self.data.sl[-1], tp=self.data.Close[-1] + self.data.tp[-1], tag=None)
-            return
-
-        if self.data.y_pred[-1]<=-1:
-            # if self.position.is_long:
-            #    self.position.close()
-            #    return
-            # if not self.position:
-#                self.sell(size=math.floor(100000/self.data.Close[-1]), limit=None, stop=None, tp=(1-self.data.tp[-1])*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
-            self.sell(size=1, limit=None, stop=None, tp=self.data.Close[-1] - self.data.tp[-1], sl=self.data.Close[-1] + self.data.sl[-1], tag=None)
-
-
-
-def do_backtest_Strategy2_training(X_train, y_train, params):
-    rand_int = randint(1000000, 2000000)
-    params_gpu = {
-        'num_class': 3, 'device': 'gpu',
-        'learning_rate': params['learning_rate'],
-        # 'n_estimators': params['n_estimators'],
-        'max_depth': params['max_depth'],
-        'subsample': params['subsample'],
-        'gamma': params['gamma'],
-        'objective': 'multi:softprob',
-        'seed': rand_int,
-        'eval_metric': ['mlogloss', 'merror'],
-        # 'verbose_eval': 1000
-    }
-
-    sample_weights = compute_sample_weight(
-        class_weight='balanced',
-        y=y_train
-    )
-    dtrain_gpu = DMatrix(X_train, label=y_train, weight=sample_weights)
-    # print("dtrain_gpu: ", dtrain_gpu.shape)
-    # print("dtest_gpu: ", dtest_gpu.shape)
-    # print("sample_weights: ", sample_weights.shape)
-    # print("y_train: ", y_train.shape)
-    # print("y_test: ", y_test.shape)
-    # print("X_train: ", X_train.shape)
-    # print("X_test: ", X_test.shape)
-    # print("data_target: ", data_target.shape)
-    # print("weighting: ", weighting)
-
-    print("Training model...")
-    model_gpu = train(params_gpu, dtrain_gpu, num_boost_round=params['n_estimators'])
-    # importance_scores = model_gpu.get_score(importance_type='weight')
-    # sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
-    # json.dump( sorted_by_values, open( f'importance_scores_optim_{rand_int}.json', 'w' ) )
-
-    # if X_test.count() < 5:
-    #     return pd.Series(np.zeros(X_test.count()), index=X_test.index, name="y_pred"), EMPTY_STATS, model_gpu
-
-
-    return model_gpu
-
-
-
-
-# class TrailingStrategy(SignalStrategy):
-
-#     __sl_amount = 100
-#     def set_trailing_sl(self, sl_amount: float = 100):
-#         """
-#     Set the trailing stop loss as $n below the current price (for long positions)
-#         Works for future bars only
-#         """
-#         self.__sl_amount = sl_amount
-
-
-#     def init(self):
-#         # In init() and in next() it is important to call the
-#         # super method to properly initialize the parent classes
-#         super().init()
-
-#         # Set trailing stop-loss to 2x ATR using
-#         # the method provided by `TrailingStrategy`
-# #        self.set_trailing_sl(2)
-#     def next(self):
-# #        print(self.data.df['labeling_multi'].iloc[-1])
-
-#         for trade in self.trades:
-#             if trade.is_long:
-#                 trade.sl = max(trade.sl or -np.inf, self.data.High[-1] - self.__sl_amount)
-#             elif trade.is_short:
-#                 trade.sl = min(trade.sl or np.inf, self.data.Low[-1] + self.__sl_amount)
-
-# class Strategy2_opt_evals(TrailingStrategy):
-
-#     def init(self, sl_amount: float = 100, tp_amount: float = 150):
-#         # In init() and in next() it is important to call the
-#         # super method to properly initialize the parent classes
-#         super().init()
-#         self.set_trailing_sl(sl_amount)
-
-#     def next(self):
-# #        print(self.data.df['labeling_multi'].iloc[-1])
-#         super().next()
-
-#         if self.position:
-#             if self.data.DaytradingExit[-1]:
-#                 self.position.close()
-#                 return
-#             return
-        
-#         if self.data.y_pred[-1]>=0.5:
-#             # if self.position.is_short:
-#             #    self.position.close()
-#             #    return
-#             # if not self.position:
-# #                self.buy(size=math.floor(100000/self.data.Close[-1]), limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1])*self.data.Close[-1], tag=None)
-#             self.buy(size=1, limit=None, stop=None, sl=self.data.Close[-1]-self.__sl_amount, tp=self.data.Close[-1]+self.__tp_amount, tag=None)
-
-#         if self.data.y_pred[-1]<=-0.5:
-#             # if self.position.is_long:
-#             #    self.position.close()
-#             #    return
-#             # if not self.position:
-# #                self.sell(size=math.floor(100000/self.data.Close[-1]), limit=None, stop=None, tp=(1-self.data.tp[-1])*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
-#             self.sell(size=1, limit=None, stop=None, tp=self.data.Close[-1]-self.__tp_amount, sl=self.data.Close[-1]+self.__sl_amount, tag=None)

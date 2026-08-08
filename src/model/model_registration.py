@@ -1,17 +1,22 @@
-import pandas as pd
-import dvc.api
 import logging
-import mlflow
 import os
-import json
 from datetime import datetime
+
+import dvc.api
+import mlflow
+import pandas as pd
+from dotenv import load_dotenv
 from mlflow.tracking import MlflowClient
 
 from src.backtesting.optimization import train_register_model
 from src.data_utils.utils import get_dates
+from src.model.mlflow_utils import (
+    find_latest_experiment,
+    find_latest_model_version,
+    load_model_params_from_experiment,
+    set_alias_to_model_version,
+)
 from src.model.model_building import load_data
-from src.model.mlflow_utils import find_latest_experiment, find_latest_model_version, load_model_params_from_experiment, set_alias_to_model_version
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -38,7 +43,9 @@ logger.addHandler(file_handler)
 def main():
 
     # Load parameters from the root directory
-    params = dvc.api.params_show('params.yaml')['model_building']
+    params = dvc.api.params_show('params.yaml')
+    model_tag = params['model_registration']['model_tag']
+    params = params['model_building']
 
     # Load the preprocessed data from the interim directory
     data = load_data(data_path=params['data_path'], params=params)
@@ -51,7 +58,7 @@ def main():
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
 
-    experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
+    experiment = find_latest_experiment(client, {"project_name": params['project_name'], "stage": "building"})
     experiment_id = experiment.experiment_id
     print(f"Experiment ID: {experiment_id}")
 
@@ -68,8 +75,8 @@ def main():
 
     client = mlflow.MlflowClient()
     version = find_latest_model_version(client, registered_model_name)
-    set_alias_to_model_version(client, registered_model_name, version, 'Staging', logger=logger)
-    print(f"Model version {version} set to alias Staging for model {registered_model_name}")
+    set_alias_to_model_version(client, registered_model_name, version, model_tag, logger=logger)
+    print(f"Model version {version} set to alias {model_tag} for model {registered_model_name}")
 
 
 if __name__ == '__main__':

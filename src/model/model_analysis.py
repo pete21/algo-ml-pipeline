@@ -200,7 +200,7 @@ def main():
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
 
-    experiment = find_latest_experiment(client, json.loads(os.getenv('BUILDING_EXPERIMENT_TAGS')))
+    experiment = find_latest_experiment(client, {"project_name": params['model_building']['project_name'], "stage": "building"})
     experiment_id = experiment.experiment_id
     print(f"Experiment ID: {experiment_id}")
     

@@ -55,9 +55,7 @@ App title/version are updated after a successful reload.
 
 ### Optional env vars
 
-- `REGISTERED_MODEL_NAME` (default: `{MODEL_NAME}_20260525`)
-- `MODEL_VERSION_ALIAS` (default: `Staging`)
-- `MODEL_SERVE_PORT` (default: `8000`)
+- `PORT` (default: `8100`)
 
 ### Docker
 
@@ -71,7 +69,7 @@ docker run --rm \
   --env-file ./.env \
   -e MLFLOW_TRACKING_URI=http://host.docker.internal:5000/ \
   --add-host=host.docker.internal:host-gateway \
-  -p 8100:8000 \
+  -p 8100:8100 \
   algo-ml-model-serving
 ```
 
@@ -82,7 +80,7 @@ cd src/serving/
 docker compose up --build
 ```
 
-Swagger UI: `http://localhost:{MODEL_SERVE_PORT}/docs`
+Swagger UI: `http://localhost:{PORT}/docs`
 
 When running in Docker, set `MLFLOW_TRACKING_URI` to a host reachable from the container
 (for example `http://host.docker.internal:5000/` or `http://mlflow:5000/` instead of `http://localhost:5000/`).

@@ -3,22 +3,23 @@ import multiprocessing as mp
 import os
 from datetime import date, datetime
 from random import random
+from typing import Any
 
 import mlflow
 import numpy as np
 import pandas as pd
+from joblib import dump
 
 from src.backtesting.strategies import (
-    do_backtest_Strategy2_evals,
-    do_backtest_Strategy2_trading,
-    do_backtest_Strategy2_trading_elasticnet_regression,
-    do_backtest_Strategy2_trading_linear_regression,
-    do_backtest_Strategy2_trading_logistic_regression,
-    do_backtest_Strategy2_trading_regression,
-    do_backtest_Strategy2_trading_ridge_regression,
-    do_backtest_Strategy2_trading_svc,
-    do_backtest_Strategy2_trading_svr_regression,
-    do_backtest_Strategy2_training,
+    do_backtest_Strategy_elasticnet_regression,
+    do_backtest_Strategy_lasso_regression,
+    do_backtest_Strategy_linear_regression,
+    do_backtest_Strategy_logistic_regression,
+    do_backtest_Strategy_ridge_regression,
+    do_backtest_Strategy_svc_classification,
+    do_backtest_Strategy_svr_regression,
+    do_backtest_Strategy_xgb_classification,
+    do_backtest_Strategy_xgb_regression,
 )
 from src.data_utils.features import (
     build_target,
@@ -67,7 +68,28 @@ def flatten_concatenation(matrix):
         flat_list += row
     return flat_list
 
-def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: list, experiment_id: str, model_params_override: dict = None) -> float:
+
+def calc_aggregate_target(df, model_params: dict):
+        # _, data[index_base].loc[:,"labeling_dual_ema1"], _ = build_target(data[index_base], \
+        #     open_col='Open', high_col='High', low_col='Low', high_time_col="high_time", low_time_col="low_time", \
+        #     tp=model_params['target_tp'], ema_period=model_params['ema_period'], ema_reversed_period=model_params['ema_reversed_period'], \
+        #     threshold_long=model_params['threshold_long'], threshold_short=model_params['threshold_short'])
+        df.loc[:,"labeling_dual_ema1"] = 0
+
+        _, df.loc[:,"labeling_dual_ema2"], _ = build_target_triple(df, \
+            open_col='Open', high_col='High', low_col='Low', high_time_col="high_time", low_time_col="low_time", \
+            tp=model_params['target_tp'], ema_period=model_params['ema_period'], ema_reversed_period=model_params['ema_reversed_period'], \
+            threshold_long=model_params['threshold_long'], threshold_short=model_params['threshold_short'])
+        # data[index_base].loc[:,"labeling_dual_ema2"] = 0
+
+# data[index_base].loc[:,"labeling_binary"], data[index_base].loc[:,"labeling_dual_ema"], data[index_base].loc[:,"labeling_multi"]
+
+        # data[index_base] = build_target_2b(df=data[index_base], ref_column="Close_wavelet")        # ha_close # Close_wavelet
+        df = build_target_2c(df=df, ref_column="Close_wavelet", periods=model_params['target3_periods'])        # ha_close # Close_wavelet
+        df.loc[:,"labeling_multi"] = df.loc[:,"labeling_dual_ema1"]*model_params['target1_weight'] + df.loc[:,"labeling_dual_ema2"]*model_params['target2_weight'] + df.loc[:,"labeling_multi2"]*model_params['target3_weight']
+
+
+def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: list, experiment_id: str, model_params_override: dict | None = None) -> float:
 
     index_base = params['index_base']
     indexes_higher = params['indexes_higher']
@@ -89,10 +111,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
     with mlflow.start_run(run_name=run_name) as run:
         mlflow.log_param('cutoff_date', cutoff_date)
-        if params['evals_strategy']:
-            mlflow.log_param('_strategy', 'do_backtest_Strategy2_evals')
-        else:
-            mlflow.log_param('_strategy', 'do_backtest_Strategy2_trading')
+        mlflow.log_param('evals_strategy', params['evals_strategy'])
         mlflow.log_params(params)
 
         model_params = model_params_override or {
@@ -107,7 +126,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'sma1_period': trial.suggest_int('sma1_period', 11, 14),
             'sma2_period': trial.suggest_int('sma2_period', 80, 90), 
             'bb_periods': trial.suggest_int('bb_periods', 40, 44),
-            'bb_nbdev': trial.suggest_float('bb_nbdev', 1.9, 2.15),
+            'bb_nbdev': trial.suggest_float('bb_nbdev', 1.92, 2.2),
             'ema1_period': trial.suggest_int('ema1_period', 3, 6),
             'ema2_period': trial.suggest_int('ema2_period', 16, 25),
             'sar_acc': trial.suggest_float('sar_acc', 0.45, 0.54), 
@@ -124,12 +143,12 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'ha_candle_period': trial.suggest_int('ha_candle_period', 25, 30), 
             'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 32, 36), 
             'displacement_strength_period': trial.suggest_int('displacement_strength_period', 20, 28), 
-            'displacement_strength': trial.suggest_float('displacement_strength', 1.3, 1.6),
+            'displacement_strength': trial.suggest_float('displacement_strength', 1.3, 1.55),
             'displacement_hull_period': trial.suggest_int('displacement_hull_period', 20, 25), 
             #    'displacement_sma_period': trial.suggest_int('displacement_sma_period', 2, 30), 
             'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 6, 10),
 
-            'gap_lookback': trial.suggest_int('gap_lookback', 1, 2),
+            'gap_lookback': trial.suggest_int('gap_lookback', 2, 2),
             'gap_hull_period': trial.suggest_int('gap_hull_period', 12, 16),             # minimum 4
             'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 4, 6),
 
@@ -145,7 +164,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'rsi_period': trial.suggest_int('rsi_period', 15, 20),
             'rsi_slope_period': trial.suggest_int('rsi_slope_period', 15, 20),
             'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 7, 9),
-            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 12, 15),
+            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 12, 16),
             'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 21, 27),
             'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 10, 16),
             'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 36, 42),
@@ -171,13 +190,13 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
             'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 8, 12),
 
-            'target_tp': trial.suggest_float('target_tp', 0.0029, 0.0032),
+            'target_tp': trial.suggest_float('target_tp', 0.0028, 0.0032),
             'ema_period': trial.suggest_int('ema_period', 18, 24),
             'ema_reversed_period': trial.suggest_int('ema_reversed_period', 3, 6),
             'threshold_long': trial.suggest_float('threshold_long', 0.8, 0.8, step=0.01),
             'threshold_short': trial.suggest_float('threshold_short', 0.2, 0.2, step=0.01),
             'threshold': trial.suggest_float('threshold', 0.45, 0.45, step=0.01),
-            'pred_ewm_span': trial.suggest_float('pred_ewm_span', 1.6, 2.5, step=0.05),
+            'pred_ewm_span': trial.suggest_float('pred_ewm_span', 1.7, 2.5, step=0.05),
             'pca_ichimoku': trial.suggest_categorical('pca_ichimoku', [False]),
             'pca_kama': trial.suggest_categorical('pca_kama', [False]),
             'weekday': trial.suggest_categorical('weekday', [0]),                     # 0: Monday, 2: Wednesday, 4: Friday
@@ -196,25 +215,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
                 model_params['sl'] = trial.suggest_float('sl', model_params['tp'], model_params['tp'])
 
 
-        # _, data[index_base].loc[:,"labeling_dual_ema1"], _ = build_target(data[index_base], \
-        #     open_col='Open', high_col='High', low_col='Low', high_time_col="high_time", low_time_col="low_time", \
-        #     tp=model_params['target_tp'], ema_period=model_params['ema_period'], ema_reversed_period=model_params['ema_reversed_period'], \
-        #     threshold_long=model_params['threshold_long'], threshold_short=model_params['threshold_short'])
-
-        data[index_base].loc[:,"labeling_dual_ema1"] = 0
-
-        _, data[index_base].loc[:,"labeling_dual_ema2"], _ = build_target_triple(data[index_base], \
-            open_col='Open', high_col='High', low_col='Low', high_time_col="high_time", low_time_col="low_time", \
-            tp=model_params['target_tp'], ema_period=model_params['ema_period'], ema_reversed_period=model_params['ema_reversed_period'], \
-            threshold_long=model_params['threshold_long'], threshold_short=model_params['threshold_short'])
-
-        # data[index_base].loc[:,"labeling_dual_ema2"] = 0
-
-# data[index_base].loc[:,"labeling_binary"], data[index_base].loc[:,"labeling_dual_ema"], data[index_base].loc[:,"labeling_multi"]
-
-        # data[index_base] = build_target_2b(df=data[index_base], ref_column="Close_wavelet")        # ha_close # Close_wavelet
-        data[index_base] = build_target_2c(df=data[index_base], ref_column="Close_wavelet", periods=model_params['target3_periods'])        # ha_close # Close_wavelet
-        data[index_base].loc[:,"labeling_multi"] = data[index_base].loc[:,"labeling_dual_ema1"]*model_params['target1_weight'] + data[index_base].loc[:,"labeling_dual_ema2"]*model_params['target2_weight'] + data[index_base].loc[:,"labeling_multi2"]*model_params['target3_weight']
+        calc_aggregate_target(data[index_base], model_params)
 
         p={}
         for i in indexes_higher:
@@ -222,8 +223,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], cutoff_date, lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
         y=y+1
 
-        print(X.columns.values)
-        print(X_columns)
+        # print(X_columns)
         # X.to_csv('X.csv', index=True, header=True)
         # y.to_csv('y.csv', index=True, header=True)
         num_splits = params['num_splits']
@@ -268,6 +268,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             y_train = y.loc[mask]
 
             X_train, y_train = remove_outliers(X_train, y_train, params, threshold=1.005)
+            X_train = drop_ohlc_columns(X_train, list_X)
 
             X_test = X.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
             # y_test = y.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
@@ -282,27 +283,17 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
             X_test = X_test.loc[(X_test['minute_of_day']>=model_params['hour_range_start']) & (X_test['minute_of_day']<model_params['hour_range_stop'])]
 
-            to_drop = ['minute_of_day', 'local_date']                # ['minute_of_day', 'local_date'] - dropped, not feature columns
-            for col in ['Open', 'High', 'Low', 'Close']:             # ['Open', 'High', 'Low', 'Close'] - dropped with lags if not in list_X (features)
-                if col not in list_X:                               
-                    to_drop.extend([s for i, s in enumerate(X_columns) if s.startswith(col)])
-            print(to_drop)
-            X_train = X_train.drop(columns=to_drop)
-            X_test = X_test.drop(columns=to_drop)
+            X_test = drop_ohlc_columns(X_test, list_X)
 
-            print(X_train.columns.values)
             # X_train.to_csv('X_train_'+str(i)+'.csv')
             # y_train.to_csv('y_train_'+str(i)+'.csv')
             #data_target = data_target.join(ml_data['atr']).ffill().bfill()
-            tuples.append((X_train, X_test, y_train, y_test, data_target, model_params, 1))         # exponential_growth(1, 0.02, num_splits-idx-1)
+            tuples.append((params, X_train, y_train, X_test, y_test, data_target, model_params))         # exponential_growth(1, 0.02, num_splits-idx-1)
 
         results = []
         # with mp.Pool(10) as p:
-        with mp.Pool(12, maxtasksperchild=1) as p:
-            if params['evals_strategy']:
-                results = p.starmap(do_backtest_Strategy2_evals, tuples)
-            else:
-                results = p.starmap(do_backtest_Strategy2_trading_svr_regression, tuples)
+        with mp.Pool(8, maxtasksperchild=1) as p:
+            results = p.starmap(run_backtest_strategy, tuples)
             p.close()
             p.join()
             # p.terminate()
@@ -376,8 +367,6 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
                 optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) * (0.5 + sharpe_coeff/10 + win_rate + np.log(total_trades)/10 - avg_win/avg_loss/10)
             else:
                 optimisation_score = (total_profit + np.nanmean(np.sort(profits)[:int(num_splits/4)])) * (1 + sharpe_coeff/10 + win_rate/5 + np.log(total_trades)/5 - avg_win/avg_loss/10) #* np.sqrt(max(np.mean(sortino)+np.mean(calmar), 1)) / (parameters['hour_range_stop']-parameters['hour_range_start']+2)
-
-            mlflow.log_metric('optimisation_score', optimisation_score)
             
             # try:
             #     mlflow.log_metric('Avg_Drawdown_Duration_Seconds', int(sum(s['Avg. Drawdown Duration'].seconds*s['# Trades'] for s in stats) / total_trades))
@@ -449,38 +438,14 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
                         # mlflow.log_params(res[5])
                         print(res)
                         print(f"Error logging child run {idx}: {e}")
-
-            # last_model_gpu = results[-1][2]
-            # mlflow.xgboost.log_model(xgb_model=last_model_gpu, name='xgb_model_gpu',
-            # # registered_model_name=f'xgb_model_gpu_{run_name}',
-            # metadata={
-            #     'train_split': train_splits[-1],
-            #     'train_start': unique_dates[max(train_splits[-1]-model_params['train_range_len']*5, 1)],
-            #     'train_end': unique_dates[train_splits[-1]],
-            # }, params={
-            #     'num_class': 3,
-            #     'device': 'gpu',
-            #     'learning_rate': model_params['learning_rate'],
-            #     'max_depth': model_params['max_depth'],
-            #     'subsample': model_params['subsample'],
-            #     'gamma': model_params['gamma'],
-            #     'objective': 'multi:softprob',
-            #     'eval_metric': 'auc',
-            # })
-
-            # importance_scores = last_model_gpu.get_score(importance_type='weight')
-            # sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
-            # with open(os.path.join(params['models_path'], f'importance_scores_weight.json'), "w") as file_name:
-            #     json.dump(sorted_by_values, file_name)
-            # mlflow.log_artifact(os.path.join(params['models_path'], f'importance_scores_weight.json'), artifact_path='importance_scores')
             
         else:
             mlflow.log_metric('total_trades', 0)
             mlflow.log_metric('total_profit', 0)
             mlflow.log_metric('win_trades', 0)
             mlflow.log_metric('loss_trades', 0)
-            mlflow.log_metric('optimisation_score', optimisation_score)
-
+        
+        mlflow.log_metric('optimisation_score', optimisation_score)
 
     return optimisation_score
 
@@ -495,6 +460,38 @@ def remove_outliers(X_df: pd.DataFrame, y_df: pd.DataFrame, params: dict, thresh
     y_df = y_df.loc[mask]
 
     return X_df, y_df
+
+def drop_ohlc_columns(X_df: pd.DataFrame, list_X: list) -> pd.DataFrame:
+    to_drop = ['minute_of_day', 'local_date']                # ['minute_of_day', 'local_date'] - dropped, not feature columns
+    for col in ['Open', 'High', 'Low', 'Close']:             # ['Open', 'High', 'Low', 'Close'] - dropped with lags if not in list_X (features)
+        if col not in list_X:                               
+            to_drop.extend([s for s in X_df.columns if s.startswith(col)])
+    return X_df.drop(columns=to_drop)
+
+def run_backtest_strategy(params: dict, X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.DataFrame, y_test: pd.DataFrame, data_target: pd.DataFrame, model_params: dict) -> tuple[Any, Any]:
+    if params['model_type'] == 'xgb_classification':
+        model, scaler = do_backtest_Strategy_xgb_classification(X_train, y_train, X_test, y_test, data_target, model_params, params['evals_strategy'])
+    elif params['model_type'] == 'xgb_regression':
+        model, scaler = do_backtest_Strategy_xgb_regression(X_train, y_train, X_test, y_test, data_target, model_params, params['evals_strategy'])
+    elif params['model_type'] == 'linear_regression':
+        model, scaler = do_backtest_Strategy_linear_regression(X_train, y_train, X_test, y_test, data_target, model_params, params['evals_strategy'])
+    elif params['model_type'] == 'logistic_regression':
+        model, scaler = do_backtest_Strategy_logistic_regression(X_train, y_train, X_test, y_test, data_target, model_params, params['evals_strategy'])
+    elif params['model_type'] == 'ridge_regression':
+        model, scaler = do_backtest_Strategy_ridge_regression(X_train, y_train, X_test, y_test, data_target, model_params, params['evals_strategy'])
+    elif params['model_type'] == 'lasso_regression':
+        model, scaler = do_backtest_Strategy_lasso_regression(X_train, y_train, X_test, y_test, data_target, model_params, params['evals_strategy'])
+    elif params['model_type'] == 'elasticnet_regression':
+        model, scaler = do_backtest_Strategy_elasticnet_regression(X_train, y_train, X_test, y_test, data_target, model_params, params['evals_strategy'])
+    elif params['model_type'] == 'svr_regression':
+        model, scaler = do_backtest_Strategy_svr_regression(X_train, y_train, X_test, y_test, data_target, model_params, params['evals_strategy'])
+    elif params['model_type'] == 'svc_classification':
+        model, scaler = do_backtest_Strategy_svc_classification(X_train, y_train, X_test, y_test, data_target, model_params, params['evals_strategy'])
+    else:
+        raise ValueError(f"Invalid model type: {params['model_type']}")
+
+    return model, scaler
+
 
 
 def train_register_model(data: dict, params: dict, unique_weekdates: list, train_split_index: int, experiment_id: str, model_params: dict) -> str:
@@ -518,13 +515,7 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
     with mlflow.start_run(run_name=run_name) as run:
         mlflow.log_params(params)
 
-
-        data[index_base].loc[:,"labeling_binary"], data[index_base].loc[:,"labeling_dual_ema"], data[index_base].loc[:,"labeling_multi"] = build_target(data[index_base], \
-            open_col='Open', high_col='High', low_col='Low', high_time_col="high_time", low_time_col="low_time", \
-            tp=model_params['target_tp'], ema_period=model_params['ema_period'], ema_reversed_period=model_params['ema_reversed_period'], \
-            threshold_long=model_params['threshold_long'], threshold_short=model_params['threshold_short'])
-
-        data[index_base] = build_target_2(data[index_base], labeling_col="labeling_dual_ema", threshold=model_params['threshold'])
+        calc_aggregate_target(data[index_base], model_params)
 
         p={}
         for i in indexes_higher:
@@ -532,8 +523,8 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
         X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], date(2026,1,1), lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
         y=y+1
 
-        X.to_csv('X.csv', index=True, header=True)
-        y.to_csv('y.csv', index=True, header=True)
+        X.to_csv('X_reg.csv', index=True, header=True)
+        y.to_csv('y_reg.csv', index=True, header=True)
 
         train_splits = [train_split_index]
         print(train_splits)
@@ -559,47 +550,106 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
         # y_train.to_csv('y_train.csv', index=True, header=True)
 
         X_train, y_train = remove_outliers(X_train, y_train, params, threshold=1.005)
+        X_train = drop_ohlc_columns(X_train, list_X)
 
-        X_train=X_train.drop(columns=['minute_of_day', 'local_date'])
+        registered_model_name = f'{params["model_type"]}_v{params["version"]}_{train_split.strftime("%Y%m%d")}'
 
-        model_gpu = do_backtest_Strategy2_training(X_train, y_train, model_params)
+
+        model, scaler = run_backtest_strategy(params, X_train, y_train, None, None, None, model_params)
+
+        if scaler is not None:
+            # 2. Save scaler locally and log it as a separate artifact
+            scaler_name = f"{registered_model_name}_scaler.joblib"
+            scaler_path = os.path.join(params['models_path'], scaler_name)
+            dump(scaler, scaler_path)
+            mlflow.log_artifact(local_path=scaler_path, artifact_path="preprocessing")
+        else:
+            scaler_name=None
+            scaler_path=None
+        mlflow.log_params({'scaler': scaler_name})
+
 
         # Define example input and infer the signature (schema)
         input_example = X_train.iloc[-5:] # Use the last 5 rows as an example
-        # predictions = model_gpu.predict(DMatrix(input_example))
-        # signature = infer_signature(input_example, predictions)
-        
-        registered_model_name = f'{os.getenv("MODEL_NAME")}_{train_split.strftime("%Y%m%d")}'
-        mlflow.xgboost.log_model(xgb_model=model_gpu, name=os.getenv('MODEL_NAME'),
-        # signature=signature,
-        input_example=input_example,
-        registered_model_name=registered_model_name,
-        metadata={
-            'train_start': train_start_idx,
-            'train_end': train_split,
-        }, params={
-            'num_class': 3,
-            'device': 'gpu',
-            'learning_rate': model_params['learning_rate'],
-            'max_depth': model_params['max_depth'],
-            'subsample': model_params['subsample'],
-            'gamma': model_params['gamma'],
-            'objective': 'multi:softprob',
-            'eval_metric': ['mlogloss', 'merror'],
-        })
+        # Run example predictions on data (last records of X_train) and print the results
+        if scaler is not None:
+            input_example_scaled = scaler.transform(input_example)
+            y_example = model.predict(input_example_scaled)
+        else:
+            y_example = model.predict(input_example)
+        print(f"Last training rows predictions: {y_example}")
+        mlflow.log_param('example_predictions', y_example)
 
-        importance_scores = model_gpu.get_score(importance_type='weight')
-        sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
-        with open(os.path.join(params['models_path'], 'importance_scores_weight.json'), "w") as file_name:
-            json.dump(sorted_by_values, file_name)
-        mlflow.log_artifact(os.path.join(params['models_path'], 'importance_scores_weight.json'), artifact_path='importance_scores')
 
-        importance_scores = model_gpu.get_score(importance_type='gain')
-        sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
-        with open(os.path.join(params['models_path'], 'importance_scores_gain.json'), "w") as file_name:
-            json.dump(sorted_by_values, file_name)
-        mlflow.log_artifact(os.path.join(params['models_path'], 'importance_scores_gain.json'), artifact_path='importance_scores')
+        if params['model_type'] in ['xgb_regression', 'xgb_classification']:
+            # predictions = model.predict(DMatrix(input_example))
+            # signature = infer_signature(input_example, predictions)
+            
+            mlflow.xgboost.log_model(
+            xgb_model=model,
+            name=registered_model_name,
+            # signature=signature,
+            input_example=input_example,
+            registered_model_name=registered_model_name,
+            metadata={
+                'train_start': train_start_idx,
+                'train_end': train_split,
+            }, params={
+                'num_class': 3,
+                'device': 'gpu',
+                'learning_rate': model_params['learning_rate'],
+                'max_depth': model_params['max_depth'],
+                'subsample': model_params['subsample'],
+                'gamma': model_params['gamma'],
+                'objective': 'multi:softprob',
+                'eval_metric': ['mlogloss', 'merror'],
+            })
 
+
+            importance_scores = model.get_score(importance_type='weight')
+            sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
+            with open(os.path.join(params['models_path'], 'importance_scores_weight.json'), "w") as file_name:
+                json.dump(sorted_by_values, file_name)
+            mlflow.log_artifact(os.path.join(params['models_path'], 'importance_scores_weight.json'), artifact_path='importance_scores')
+
+            importance_scores = model.get_score(importance_type='gain')
+            sorted_by_values = dict(sorted(importance_scores.items(), key=lambda item: item[1]))
+            with open(os.path.join(params['models_path'], 'importance_scores_gain.json'), "w") as file_name:
+                json.dump(sorted_by_values, file_name)
+            mlflow.log_artifact(os.path.join(params['models_path'], 'importance_scores_gain.json'), artifact_path='importance_scores')
+
+        elif params['model_type'] in ['linear_regression', 'logistic_regression', 'ridge_regression', 'lasso_regression', 'elasticnet_regression']:
+            mlflow.sklearn.log_model(
+            model=model,
+            name=registered_model_name,
+            input_example=input_example,
+            registered_model_name=registered_model_name,
+            metadata={
+                'train_start': train_start_idx,
+                'train_end': train_split,
+            })
+
+        elif params['model_type'] in ['svr_regression', 'svc_classification']:
+            mlflow.sklearn.log_model(
+                sk_model=model,
+                name=registered_model_name,
+                input_example=input_example,
+                registered_model_name=registered_model_name,
+                metadata={
+                    'train_start': train_start_idx,
+                    'train_end': train_split,
+                    'scaler': scaler_name,
+                }, params={
+                    'kernel': 'rbf',
+                    'C': 0.5,
+                    'gamma': 'scale',
+                    'epsilon': 0.2,
+                },
+                extra_files=[scaler_path] if scaler_path is not None else None
+            )
+
+        else:
+            raise ValueError(f"Invalid model type: {params['model_type']}")
 
         # Save the trained model in the root directory
         print("Saving model parameters to json...")
