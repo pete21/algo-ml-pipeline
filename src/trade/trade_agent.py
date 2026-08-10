@@ -1,22 +1,31 @@
-import os
+import json
 import logging
+import os
 import threading
 import time
-import json
-import requests
 from datetime import datetime, timedelta, timezone
 
 import mysql.connector
 import pandas as pd
+import requests
 from dotenv import load_dotenv
 from kafka import KafkaConsumer
 
 from src.trade.data_ingestion_trade import main as data_ingestion_trade_main
-from src.trade.db_utils import get_mysql_connection, get_open_orders, insert_db_order, insert_predictions, sleep_until_next_cycle, update_order_from_marketbroker_response, update_order_from_kafka_event
+from src.trade.db_utils import (
+    get_mysql_connection,
+    get_open_orders,
+    insert_db_order,
+    insert_predictions,
+    sleep_until_next_cycle,
+    update_order_from_kafka_event,
+    update_order_from_marketbroker_response,
+)
+from src.trade.model_inference_trade import fetch_model_info
 from src.trade.model_inference_trade import main as model_inference_trade_main
 
 load_dotenv()
-EXECUTE_ORDER_THRESHOLD = 0.5
+EXECUTE_ORDER_THRESHOLD = 1
 ORDER_PRICE_SHIFT = 0.0002
 
 INTERVAL_MINUTES = 5
@@ -294,9 +303,14 @@ def kafka_listener_loop(stop_event: threading.Event) -> None:
 
 
 def run_cycle() -> None:
+    """Run a single cycle of the trade agent."""
+    model_info = fetch_model_info(logger)
+    registered_model_name = model_info['registered_model_name']
+    model_version = model_info['model_version']
+
     logger.info("Starting data ingestion...")
     data_ingestion_trade_main(logger)
-    logger.info("Data ingestion completed. Starting model inference...")
+    logger.info("Data ingestion completed.")
     result = model_inference_trade_main(logger)
     logger.info("Model inference completed.")
 
@@ -304,12 +318,9 @@ def run_cycle() -> None:
         logger.warning("No inference results to insert.")
         return
 
-    registered_model_name = os.getenv('MODEL_NAME') + '_' + os.getenv('MODEL_DATE')
-    model_version = 0
     mysql_connection = get_mysql_connection()
     try:
-        inserted = insert_predictions(mysql_connection, result.y_pred, TICKER, registered_model_name, model_version, logger)
-
+        inserted = insert_predictions(mysql_connection, result.y_pred, result.raw_prediction, TICKER, registered_model_name, model_version, logger)
 
         # Check if there are any open orders for the ticker
         open_orders = get_open_orders(mysql_connection, TICKER)
@@ -362,6 +373,7 @@ def run_cycle() -> None:
 ########################################################
 
 def main() -> None:
+    """Main function to run the trade agent."""
     logger.info(
         "Starting trade agent daemon (every %d minutes, %d seconds after the period)",
         INTERVAL_MINUTES,

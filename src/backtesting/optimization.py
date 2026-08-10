@@ -33,9 +33,19 @@ from src.data_utils.features import (
 from src.data_utils.utils import getXy
 from src.model.mlflow_utils import save_model_params
 
+MULTIPROCESSING_POOL = 12
+
 # LOG_SPLITS_TABLE={}
 # for num_splits in range(5,16):
 #     LOG_SPLITS_TABLE[num_splits] = num_splits-1-(np.round(np.logspace(0,10,num=num_splits-1,base=0.93308)-0.5,3))*((num_splits-2)*2)
+
+# Alternative logarithmic split table
+# start=1000
+# n=24
+# step=50
+# arr = [np.log(i) for i in range(start, start+n*step, step)]-np.log(1)
+# target_min, target_max = 1, n
+# scaled_arr = ((arr - arr.min()) * (target_max - target_min)) / (arr.max() - arr.min()) + target_min
 
 LOG_SPLITS_TABLE = {
     2: [1.0],
@@ -50,16 +60,16 @@ LOG_SPLITS_TABLE = {
     13: [1.0, 2.342,  3.596,  4.784,  5.906,  6.94 ,  7.93 ,  8.832, 9.712, 10.526, 11.274, 12.   ],
     14: [1.0, 2.344,  3.616,  4.816,  5.944,  7.024,  8.032,  8.968, 9.88 , 10.72 , 11.536, 12.28 , 13.   ],
     15: [1.0, 2.352,  3.626,  4.848,  5.992,  7.084,  8.124,  9.086, 10.022, 10.906, 11.738, 12.518, 13.272, 14.   ],
-    16: [ 1.0, 2.344,  3.632,  4.864,  6.04 ,  7.132,  8.196,  9.204, 10.156, 11.052, 11.92 , 12.76 , 13.544, 14.272, 15.   ],
-    17: [ 1.0, 2.35,  3.64,  4.87,  6.07,  7.18,  8.26,  9.28, 10.27, 11.2 , 12.1 , 12.94, 13.75, 14.53, 15.28, 16.  ],
-    18: [ 1.0, 2.344,  3.656,  4.904,  6.088,  7.24 ,  8.328,  9.352, 10.376, 11.336, 12.232, 13.128, 13.96 , 14.76 , 15.56 , 16.296, 17.   ],
-    19: [ 1.0, 2.36,  3.652,  4.91 ,  6.1  ,  7.256,  8.378,  9.432, 10.452, 11.438, 12.39 , 13.274, 14.158, 14.974, 15.79 , 16.538, 17.286, 18.   ],
-    20: [ 1.0, 2.368,  3.664,  4.924,  6.148,  7.3  ,  8.416,  9.496, 10.54 , 11.548, 12.484, 13.42 , 14.32 , 15.184, 16.012, 16.804, 17.56 , 18.28 , 19.   ],
-    21: [ 1.0, 2.368,  3.66 ,  4.952,  6.168,  7.346,  8.448,  9.55 , 10.614, 11.64 , 12.59 , 13.54 , 14.452, 15.326, 16.2  , 16.998, 17.796, 18.556, 19.278, 20.   ],
-    22: [ 1.0, 2.36,   3.68 ,  4.96 ,  6.16 ,  7.36 ,  8.52 ,  9.6 ,  10.68,  11.72,  12.72,  13.68,  14.6 ,  15.52,  16.36,  17.2 ,  18.  ,  18.8 ,  19.56,  20.28, 21.  ],
-    23: [ 1.0, 2.344,  3.688,  4.948,  6.208,  7.384,  8.56,   9.652, 10.744, 11.794, 12.802, 13.768, 14.734, 15.658, 16.54,  17.38,  18.22,  19.018, 19.816, 20.572, 21.286, 22.  ],
-    24: [ 1.0, 2.364,  3.684,  4.96,   6.192,  7.424,  8.568,  9.712, 10.812, 11.868, 12.88,  13.892, 14.86,  15.784, 16.664, 17.544, 18.424, 19.216, 20.052, 20.8,   21.548, 22.296, 23.  ],
-    25: [ 1.0, 2.38,   3.668,  4.956,  6.198,  7.44,   8.59,   9.74,  10.844, 11.902, 12.96,  13.972, 14.938, 15.904, 16.824, 17.698, 18.572, 19.446, 20.228, 21.056, 21.792, 22.574, 23.264, 24.  ],
+    16: [1.0, 2.344,  3.632,  4.864,  6.04 ,  7.132,  8.196,  9.204, 10.156, 11.052, 11.92 , 12.76 , 13.544, 14.272, 15.   ],
+    17: [1.0, 2.35,  3.64,  4.87,  6.07,  7.18,  8.26,  9.28, 10.27, 11.2 , 12.1 , 12.94, 13.75, 14.53, 15.28, 16.  ],
+    18: [1.0, 2.344,  3.656,  4.904,  6.088,  7.24 ,  8.328,  9.352, 10.376, 11.336, 12.232, 13.128, 13.96 , 14.76 , 15.56 , 16.296, 17.   ],
+    19: [1.0, 2.36,  3.652,  4.91 ,  6.1  ,  7.256,  8.378,  9.432, 10.452, 11.438, 12.39 , 13.274, 14.158, 14.974, 15.79 , 16.538, 17.286, 18.   ],
+    20: [1.0, 2.368,  3.664,  4.924,  6.148,  7.3  ,  8.416,  9.496, 10.54 , 11.548, 12.484, 13.42 , 14.32 , 15.184, 16.012, 16.804, 17.56 , 18.28 , 19.   ],
+    21: [1.0, 2.368,  3.66 ,  4.952,  6.168,  7.346,  8.448,  9.55 , 10.614, 11.64 , 12.59 , 13.54 , 14.452, 15.326, 16.2  , 16.998, 17.796, 18.556, 19.278, 20.   ],
+    22: [1.0, 2.36,   3.68 ,  4.96 ,  6.16 ,  7.36 ,  8.52 ,  9.6 ,  10.68,  11.72,  12.72,  13.68,  14.6 ,  15.52,  16.36,  17.2 ,  18.  ,  18.8 ,  19.56,  20.28, 21.  ],
+    23: [1.0, 2.344,  3.688,  4.948,  6.208,  7.384,  8.56,   9.652, 10.744, 11.794, 12.802, 13.768, 14.734, 15.658, 16.54,  17.38,  18.22,  19.018, 19.816, 20.572, 21.286, 22.  ],
+    24: [1.0, 2.364,  3.684,  4.96,   6.192,  7.424,  8.568,  9.712, 10.812, 11.868, 12.88,  13.892, 14.86,  15.784, 16.664, 17.544, 18.424, 19.216, 20.052, 20.8,   21.548, 22.296, 23.  ],
+    25: [1.0, 2.38,   3.668,  4.956,  6.198,  7.44,   8.59,   9.74,  10.844, 11.902, 12.96,  13.972, 14.938, 15.904, 16.824, 17.698, 18.572, 19.446, 20.228, 21.056, 21.792, 22.574, 23.264, 24.  ],
     }
 
 def flatten_concatenation(matrix):
@@ -115,84 +125,77 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         mlflow.log_params(params)
 
         model_params = model_params_override or {
-            'n_estimators': trial.suggest_int('n_estimators', 420, 420, step=5),
-            'max_depth': trial.suggest_int('max_depth', 8, 8),
-            'learning_rate': trial.suggest_float('learning_rate', 0.015, 0.015, step=0.001),
-            'subsample': trial.suggest_float('subsample', 0.95, 0.95),
-            'gamma':  trial.suggest_float('gamma', 0.9, 0.9),
-            # 'feature_fraction':  trial.suggest_float('feature_fraction', 0.9, 1),
-            # 'num_leaves':  trial.suggest_int('num_leaves', 10, 200),
 
-            'sma1_period': trial.suggest_int('sma1_period', 11, 14),
-            'sma2_period': trial.suggest_int('sma2_period', 80, 90), 
-            'bb_periods': trial.suggest_int('bb_periods', 40, 44),
-            'bb_nbdev': trial.suggest_float('bb_nbdev', 1.92, 2.2),
-            'ema1_period': trial.suggest_int('ema1_period', 3, 6),
-            'ema2_period': trial.suggest_int('ema2_period', 16, 25),
-            'sar_acc': trial.suggest_float('sar_acc', 0.45, 0.54), 
+            'sma1_period': trial.suggest_int('sma1_period', 12, 12),
+            'sma2_period': trial.suggest_int('sma2_period', 85, 86), 
+            'bb_periods': trial.suggest_int('bb_periods', 43, 43),
+            'bb_nbdev': trial.suggest_float('bb_nbdev', 1.95, 2.05),
+            'ema1_period': trial.suggest_int('ema1_period', 4, 4),
+            'ema2_period': trial.suggest_int('ema2_period', 22, 22),
+            'sar_acc': trial.suggest_float('sar_acc', 0.46, 0.5), 
             'sar_max': trial.suggest_float('sar_max', 0.62, 0.68), 
             'midprice_window': trial.suggest_int('midprice_window', 2, 2), # 2,30
-            'l1_fast': trial.suggest_int('l1_fast', 5, 9), # 15,3,10
+            'l1_fast': trial.suggest_int('l1_fast', 8, 9), # 15,3,10
             'l2_fast': trial.suggest_int('l2_fast', 6, 6), 
             'l3_fast': trial.suggest_int('l3_fast', 16, 16), 
-            'l1_slow': trial.suggest_int('l1_slow', 30, 40), 
-            'l2_slow': trial.suggest_int('l2_slow', 6, 10),
-            'l3_slow': trial.suggest_int('l3_slow', 27, 32),
-            'kama_trend_period': trial.suggest_int('kama_trend_period', 30, 36),
+            'l1_slow': trial.suggest_int('l1_slow', 37, 39), 
+            'l2_slow': trial.suggest_int('l2_slow', 6, 6),
+            'l3_slow': trial.suggest_int('l3_slow', 30, 30),
+            'kama_trend_period': trial.suggest_int('kama_trend_period', 34, 34),
 
-            'ha_candle_period': trial.suggest_int('ha_candle_period', 25, 30), 
-            'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 32, 36), 
-            'displacement_strength_period': trial.suggest_int('displacement_strength_period', 20, 28), 
-            'displacement_strength': trial.suggest_float('displacement_strength', 1.3, 1.55),
-            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 20, 25), 
+            'ha_candle_period': trial.suggest_int('ha_candle_period', 28, 28), 
+            'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 34, 34), 
+            'displacement_strength_period': trial.suggest_int('displacement_strength_period', 25, 26), 
+            'displacement_strength': trial.suggest_float('displacement_strength', 1.45, 1.55),
+            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 20, 20), 
             #    'displacement_sma_period': trial.suggest_int('displacement_sma_period', 2, 30), 
-            'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 6, 10),
+            'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 5, 6),
 
             'gap_lookback': trial.suggest_int('gap_lookback', 2, 2),
-            'gap_hull_period': trial.suggest_int('gap_hull_period', 12, 16),             # minimum 4
-            'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 4, 6),
+            'gap_hull_period': trial.suggest_int('gap_hull_period', 14, 15),             # minimum 4
+            'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 6, 7),
 
-            'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.003, 0.0037),
+            'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.003, 0.0032),
             'tenkan_window': trial.suggest_int('tenkan_window', 4, 8), 
-            'kijun_window': trial.suggest_int('kijun_window', 45, 60), 
-            'cci_timeperiods': trial.suggest_int('cci_timeperiods', 24, 30),
+            'kijun_window': trial.suggest_int('kijun_window', 55, 55), 
+            'cci_timeperiods': trial.suggest_int('cci_timeperiods', 25, 25),
             'macd_fastperiod': trial.suggest_int('macd_fastperiod', 12, 12), 
             'macd_slowperiod': trial.suggest_int('macd_slowperiod', 35, 35), 
             'macd_signalperiod': trial.suggest_int('macd_signalperiod', 10, 10),
             'price_distribution_window_size': trial.suggest_int('price_distribution_window_size', 5, 5),   # 5,50
             'price_distribution_percentile_threshold': trial.suggest_float('price_distribution_percentile_threshold', 0.2, 0.2), # 0.2,0.5
-            'rsi_period': trial.suggest_int('rsi_period', 15, 20),
-            'rsi_slope_period': trial.suggest_int('rsi_slope_period', 15, 20),
-            'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 7, 9),
-            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 12, 16),
-            'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 21, 27),
+            'rsi_period': trial.suggest_int('rsi_period', 19, 19),
+            'rsi_slope_period': trial.suggest_int('rsi_slope_period', 15, 16),
+            'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 8, 8),
+            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 14, 15),
+            'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 25, 25),
             'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 10, 16),
-            'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 36, 42),
+            'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 39, 41),
 
-            'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 9, 14),
-            'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 2, 4),
-            'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 14, 18),
-            'train_range_len': trial.suggest_int('train_range_len', 20, 20),
+            'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 12, 12),
+            'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 3, 3),
+            'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 17, 18),
+            'train_range_len': trial.suggest_int('train_range_len', 22, 23),
             'test_range_len': trial.suggest_int('test_range_len', 4, 4),  #3,5
             'hour_range_start': trial.suggest_int('hour_range_start', 480, 480, step=15),
             # 'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
             'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
-            'di_timeperiod': trial.suggest_int('di_timeperiod', 10, 13),
+            'di_timeperiod': trial.suggest_int('di_timeperiod', 11, 11),
             'macd_slope_period': trial.suggest_int('macd_slope_period', 9, 9),
             # 'sl': trial.suggest_float('sl', 0.003, 0.004) if not params['evals_strategy'] else 0,
             'tp': trial.suggest_float('tp', 0.0031, 0.0034) if not params['evals_strategy'] else trial.suggest_int('tp', 50, 150),
 
-            'atr_period': trial.suggest_int('atr_period', 5, 8),
+            'atr_period': trial.suggest_int('atr_period', 7, 7),
 
-            'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 10, 14),
+            'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 14, 15),
             'stochk_slope_period': trial.suggest_int('stochk_slope_period', 8, 12),
-            'willr_timeperiod': trial.suggest_int('willr_timeperiod', 26, 31),
+            'willr_timeperiod': trial.suggest_int('willr_timeperiod', 27, 30),
 
-            'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 8, 12),
+            'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 11, 11),
 
-            'target_tp': trial.suggest_float('target_tp', 0.0028, 0.0032),
-            'ema_period': trial.suggest_int('ema_period', 18, 24),
-            'ema_reversed_period': trial.suggest_int('ema_reversed_period', 3, 6),
+            'target_tp': trial.suggest_float('target_tp', 0.0028, 0.0031),
+            'ema_period': trial.suggest_int('ema_period', 21, 21),
+            'ema_reversed_period': trial.suggest_int('ema_reversed_period', 2, 4),
             'threshold_long': trial.suggest_float('threshold_long', 0.8, 0.8, step=0.01),
             'threshold_short': trial.suggest_float('threshold_short', 0.2, 0.2, step=0.01),
             'threshold': trial.suggest_float('threshold', 0.45, 0.45, step=0.01),
@@ -201,9 +204,23 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             'pca_kama': trial.suggest_categorical('pca_kama', [False]),
             'weekday': trial.suggest_categorical('weekday', [0]),                     # 0: Monday, 2: Wednesday, 4: Friday
             'target1_weight': trial.suggest_float('target1_weight', 0, 0, step=0.1),      # 1-1.8
-            'target2_weight': trial.suggest_float('target2_weight', 1.4, 1.9, step=0.05),
-            'target3_weight': trial.suggest_float('target3_weight', 1.7, 2.4, step=0.05),
-            "target3_periods": trial.suggest_int('target3_periods', 20, 24),
+            'target2_weight': trial.suggest_float('target2_weight', 1.5, 2, step=0.05),
+            'target3_weight': trial.suggest_float('target3_weight', 1.8, 2.5, step=0.05),
+            "target3_periods": trial.suggest_int('target3_periods', 22, 22),
+
+
+            # XGBoost parameters
+            'n_estimators': trial.suggest_int('n_estimators', 420, 420, step=5),
+            'max_depth': trial.suggest_int('max_depth', 8, 8),
+            'learning_rate': trial.suggest_float('learning_rate', 0.015, 0.015, step=0.001),
+            'subsample': trial.suggest_float('subsample', 0.95, 0.95),
+            'gamma':  trial.suggest_float('gamma', 0.9, 0.9),
+            # 'feature_fraction':  trial.suggest_float('feature_fraction', 0.9, 1),
+            # 'num_leaves':  trial.suggest_int('num_leaves', 10, 200),
+
+            # SVR and SVC parameters
+            'C': trial.suggest_float('C', 0.3, 0.3, step=0.05),
+            'epsilon': trial.suggest_float('epsilon', 0.375, 0.375, step=0.025),    # 0.3,0.5
         }
 
         if not model_params_override:
@@ -250,7 +267,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
         mlflow.log_param('num_splits', num_splits)
         mlflow.log_param('train_splits', train_splits)
-        mlflow.log_param('X_columns', X_columns)
+        # mlflow.log_param('X_columns', X_columns)                      # too long to log as param (6k bytes max)
         mlflow.log_param('y_col', col_y[0])
         mlflow.log_param('index_base', index_base)
         mlflow.log_param('indexes_higher', indexes_higher)
@@ -292,7 +309,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
         results = []
         # with mp.Pool(10) as p:
-        with mp.Pool(8, maxtasksperchild=1) as p:
+        with mp.Pool(MULTIPROCESSING_POOL, maxtasksperchild=1) as p:
             results = p.starmap(run_backtest_strategy, tuples)
             p.close()
             p.join()
@@ -533,7 +550,7 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
 
         mlflow.log_params(model_params)
         mlflow.log_param('train_splits', train_splits)
-        mlflow.log_param('X_columns', X_columns)
+        # mlflow.log_param('X_columns', X_columns)
         mlflow.log_param('y_col', col_y[0])
         mlflow.log_param('index_base', index_base)
         mlflow.log_param('indexes_higher', indexes_higher)
@@ -556,6 +573,11 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
 
 
         model, scaler = run_backtest_strategy(params, X_train, y_train, None, None, None, model_params)
+
+        print("Saving model parameters to json...")
+        model_params_path = os.path.join(params['models_path'], f"{registered_model_name}_model_params.json")
+        save_model_params(model_params=model_params, file_path=model_params_path, logger=None)
+        mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
 
         if scaler is not None:
             # 2. Save scaler locally and log it as a separate artifact
@@ -603,7 +625,9 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
                 'gamma': model_params['gamma'],
                 'objective': 'multi:softprob',
                 'eval_metric': ['mlogloss', 'merror'],
-            })
+            },
+            extra_files=[scaler_path, model_params_path] if scaler_path is not None else [model_params_path]
+            )
 
 
             importance_scores = model.get_score(importance_type='weight')
@@ -627,7 +651,9 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
             metadata={
                 'train_start': train_start_idx,
                 'train_end': train_split,
-            })
+            },
+            extra_files=[scaler_path, model_params_path] if scaler_path is not None else [model_params_path]
+            )
 
         elif params['model_type'] in ['svr_regression', 'svc_classification']:
             mlflow.sklearn.log_model(
@@ -641,20 +667,15 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
                     'scaler': scaler_name,
                 }, params={
                     'kernel': 'rbf',
-                    'C': 0.5,
+                    'C': model_params['C'],
                     'gamma': 'scale',
-                    'epsilon': 0.2,
+                    'epsilon': model_params['epsilon'],
                 },
-                extra_files=[scaler_path] if scaler_path is not None else None
+                extra_files=[scaler_path, model_params_path] if scaler_path is not None else [model_params_path]
             )
 
         else:
             raise ValueError(f"Invalid model type: {params['model_type']}")
 
-        # Save the trained model in the root directory
-        print("Saving model parameters to json...")
-        model_params_path = os.path.join(params['models_path'], "model_params_registration.json")
-        save_model_params(model_params=model_params, file_path=model_params_path, logger=None)
-        mlflow.log_artifact(local_path=model_params_path, artifact_path='model_params')
 
     return registered_model_name

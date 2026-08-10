@@ -1,12 +1,13 @@
-import pandas as pd
-import os
 import logging
+import os
 
-import pytz
-from src.data_utils.static_features import static_features
-from sqlalchemy import Connection, create_engine
-from dotenv import load_dotenv
 import dvc.api
+import pandas as pd
+import pytz
+from dotenv import load_dotenv
+from sqlalchemy import Connection, create_engine
+
+from src.data_utils.static_features import static_features
 
 TICKERS = {
     'DAX40': '6374',

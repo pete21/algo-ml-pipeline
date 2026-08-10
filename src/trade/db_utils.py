@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta
-import os
 import logging
+import os
 import time
+from datetime import datetime, timedelta
+
 import mysql.connector
 import pandas as pd
-
 
 INFERENCE_TABLE = 'inference'
 ORDERS_TABLE = 'orders'
@@ -37,13 +37,13 @@ def get_mysql_connection() -> mysql.connector.MySQLConnection:
     )
 
 
-def insert_predictions(connection: mysql.connector.MySQLConnection, y_series: pd.Series, ticker: str, registered_model_name: str, model_version: int, logger: logging.Logger) -> list[int]:
+def insert_predictions(connection: mysql.connector.MySQLConnection, y_series: pd.Series, raw_prediction: pd.Series, ticker: str, registered_model_name: str, model_version: int, logger: logging.Logger) -> list[int]:
     """Insert inference results into MySQL, skipping rows with duplicate dates."""
     cursor = connection.cursor()
-    sql = f"INSERT IGNORE INTO {INFERENCE_TABLE} (ticker, timeseries_datetime, prediction, registered_model_name, model_version) VALUES (%s, %s, %s, %s, %s)"
+    sql = f"INSERT IGNORE INTO {INFERENCE_TABLE} (ticker, timeseries_datetime, prediction, raw_prediction, registered_model_name, model_version) VALUES (%s, %s, %s, %s, %s, %s)"
     inserted_ids = []
-    for date_val, prediction_val in y_series.items():
-        cursor.execute(sql, (ticker, pd.Timestamp(date_val).to_pydatetime(), float(prediction_val), registered_model_name, model_version))
+    for date_val, prediction_val, raw_prediction_val in zip(y_series.index, y_series.values, raw_prediction.values):
+        cursor.execute(sql, (ticker, pd.Timestamp(date_val).to_pydatetime(), float(prediction_val), float(raw_prediction_val), registered_model_name, model_version))
         if cursor.rowcount > 0:
             inserted_ids.append(cursor.lastrowid)
             print(f"Prediction inserted for {date_val}")

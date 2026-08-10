@@ -5,7 +5,7 @@ mlflow
 numpy
 pandas
 python-dotenv
-scikit-learn
+scikit-learn==1.9.0
 scipy
 uvicorn[standard]
 xgboost

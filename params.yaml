@@ -5,7 +5,7 @@ data_ingestion:
   data_source: 'questdb'
   table_name: 'DUKASCOPY_{ticker}_OHLC_{timeframe}'
   start_date: '2021-07-01'
-  end_date: '2026-07-31'
+  end_date: '2026-08-07'
   timeframe: '1m'
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   indexes: [1,5,7,10]
@@ -157,7 +157,7 @@ model_building:
   version: 1
   model_type: 'svr_regression'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 10
+  n_trials: 500
   num_splits: 25
   project_name: 'svr-dax-pipeline'
   evals_strategy: False
@@ -166,14 +166,13 @@ model_building:
 model_evaluation:
   dummy: True
 
+model_analysis:
+  target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor', 'total_trades']
+  analysis_path: 'data/models/analysis'
 
 model_registration:
   dummy: True
   model_tag: 'Staging'
-
-model_analysis:
-  target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor', 'total_trades']
-  analysis_path: 'data/models/analysis'
 
 
 data_ingestion_trade:

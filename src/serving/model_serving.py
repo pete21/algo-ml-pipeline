@@ -97,11 +97,10 @@ def load_registered_model(
     model_info = get_model_info(model_uri)
     model = mlflow.sklearn.load_model(model_uri)
 
-    model_params = model_info.params
-    # artifact_dir = mlflow.artifacts.download_artifacts(
-    #     run_id=run_id,
-    #     artifact_path="model_params",
-    # )
+    model_params_path = mlflow.artifacts.download_artifacts(
+        run_id=run_id,
+        artifact_path=f"{registered_model_name}/extra_files/{registered_model_name}_model_params.json",
+    )
     # json_files = [
     #     os.path.join(artifact_dir, filename)
     #     for filename in os.listdir(artifact_dir)
@@ -111,8 +110,8 @@ def load_registered_model(
     #     raise ValueError(
     #         f"No JSON model_params artifact found for run_id={run_id}"
     #     )
-    # with open(json_files[0], "r", encoding="utf-8") as file:
-    #     model_params = json.load(file)
+    with open(model_params_path, "r", encoding="utf-8") as file:
+        model_params = json.load(file)
 
 
     # # 1. Zbuduj URI zarejestrowanego modelu
@@ -124,8 +123,8 @@ def load_registered_model(
 
     example_data = None
     if model_info.saved_input_example_info:
-        artifact_path = model_info.saved_input_example_info["artifact_path"]
-        path = f"{registered_model_name}/{artifact_path}"
+        input_example_path = model_info.saved_input_example_info["artifact_path"]
+        path = f"{registered_model_name}/{input_example_path}"
         local_path = client.download_artifacts(
             run_id=run_id,
             path=path,
@@ -133,11 +132,12 @@ def load_registered_model(
         with open(local_path, "r", encoding="utf-8") as file:
             example_data = json.load(file)
 
-    scaler_name = model_params.get("scaler", None)
+    scaler_name = model_info.params.get("scaler", None)
+
     if scaler_name is not None:
-        scaler_path = client.download_artifacts(
+        scaler_path = mlflow.artifacts.download_artifacts(
             run_id=run_id,
-            path=f"preprocessing/{scaler_name}",
+            artifact_path=f"{registered_model_name}/extra_files/{scaler_name}",
         )
         scaler = joblib.load(scaler_path)
     else:
@@ -202,6 +202,10 @@ class ServingState:
         self.input_model = input_model
         self.batch_input_model = batch_input_model
         self.scaler = scaler
+        print(f"Registered model name: {self.registered_model_name}")
+        print(f"Model version info: {self.model_version_info}")
+        print(f"Scaler: {self.scaler}")
+        print(f"Input names ({len(self.input_names)}): {self.input_names}")
 
     def load_model(self, registered_model_name: str, model_version_alias: str) -> dict[str, Any]:
         """Load a registered model and replace the active serving configuration."""
@@ -244,6 +248,7 @@ class ServingState:
                 predictions = self.model.predict(scaled_data)
             else:
                 predictions = self.model.predict(df[self.input_names])
+            print(f"Predictions: {predictions}")
         return predictions.tolist()
 
 

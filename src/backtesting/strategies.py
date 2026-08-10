@@ -651,7 +651,7 @@ def do_backtest_Strategy_svr_regression(X_train, y_train, X_test, y_test, data_t
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
 
-    model_svr = SVR(kernel='rbf', C=0.5, epsilon=0.2, gamma='scale', cache_size=1000, shrinking=False)
+    model_svr = SVR(kernel='rbf', C=params['C'], epsilon=params['epsilon'], gamma='scale', cache_size=1000, shrinking=False)
     model_svr.fit(X_train_scaled, y_train)
 
     if X_test is None:
@@ -693,7 +693,7 @@ def do_backtest_Strategy_svc_classification(X_train, y_train, X_test, y_test, da
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
 
-    model_svc = SVC(kernel='rbf', C=0.5, gamma='scale', cache_size=1000, shrinking=False)
+    model_svc = SVC(kernel='rbf', C=params['C'], gamma='scale', cache_size=1000, shrinking=False)
     model_svc.fit(X_train_scaled, y_train)
 
     if X_test is None:

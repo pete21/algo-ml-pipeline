@@ -1,19 +1,22 @@
 import logging
 import os
-import requests
-import dvc.api
-import pandas as pd
-import numpy as np
-import pytz
-from src.data_utils.utils import getXy
 from datetime import date, datetime
+
+import dvc.api
+import numpy as np
+import pandas as pd
+import pytz
+import requests
 from dotenv import load_dotenv
 
+from src.backtesting.optimization import drop_ohlc_columns
+from src.data_utils.utils import getXy
 
 load_dotenv()
 
 PREDICT_URL = os.getenv("MODEL_PREDICT_URL", "http://localhost:8100/predict")
 MODEL_PARAMS_URL = os.getenv("MODEL_PARAMS_URL", "http://localhost:8100/model/params")
+MODEL_INFO_URL = os.getenv("MODEL_INFO_URL", "http://localhost:8100/")
 
 
 
@@ -75,6 +78,15 @@ def fetch_model_params(url: str, logger: logging.Logger) -> dict:
         logger.error("Model params request failed: %s", exc)
         raise
 
+def fetch_model_info(logger: logging.Logger) -> dict:
+    """Fetch model info from the model serving endpoint."""
+    response = requests.get(MODEL_INFO_URL)
+    try:
+        return response.json()
+    except requests.exceptions.RequestException as exc:
+        logger.error("Model info request failed: %s", exc)
+        raise
+
 
 def main(logger: logging.Logger) -> pd.DataFrame | None:
     print("Starting model inference process...")
@@ -93,14 +105,14 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         data[params['model_building']['index_base']].loc[:,"target"] = 0
 
         model_params = fetch_model_params(url=MODEL_PARAMS_URL, logger=logger)
-        print(f"Loaded model params: {model_params}")
-        model_params['hour_range_start'] = 6*60
-        model_params['hour_range_stop'] = 20*60
+        print(f"Model params: {model_params}")
+        # model_params['hour_range_start'] = 6*60
+        model_params['hour_range_stop'] = 18*60
 
         p={}
         for i in params['model_building']['indexes_higher']:
             p[i] = model_params
-            print(data[i].tail())
+            # print(data[i].tail())
 
         
         X, _, columns = getXy(data,
@@ -116,13 +128,16 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         params['model_building']['lags'],
         col_open="Open", col_high="High", col_low="Low", col_close="Close"
         )
-        X.drop(columns=['local_date'], inplace=True)
+
+        print(X.columns)
+        X = drop_ohlc_columns(X, params['model_building']['list_X'])
+        print(X.columns)
 
         # X.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'X.csv'), index=True)
         print(X.tail())
         # print(y.head())
         # print(columns)
-        num_rows = 5
+        num_rows = 10
         predictions = request_predictions(X, url=PREDICT_URL, n_rows=num_rows, logger=logger)
         print(f"Received {len(predictions.get('predictions', []))} predictions")
         print(predictions)
@@ -131,10 +146,10 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
             # average = np.multiply(i, [-1,0,1])
             # print(np.sum(average))
 
-        y_pred_expected = np.matmul(predictions['predictions'], np.array([[-1],[0],[1]]))
+        # y_pred_expected = np.matmul(predictions['predictions'], np.array([[-1],[0],[1]]))
         # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
         # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=params['pred_avg_period'], min_periods=1).mean()
-        y_series = pd.Series(y_pred_expected.flatten(), index=X.index[-num_rows:], name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
+        y_series = pd.Series(predictions['predictions'], index=X.index[-num_rows:], name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
         print(y_series)
 
     except Exception as e:
@@ -149,9 +164,9 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
     # result['Close'] = data[index_base].reindex(result.index)['Close']
     result['tp'] = model_params['tp']
     result['sl'] = model_params['sl']
+    result['raw_prediction'] = predictions['predictions']
     result.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'result.csv'), index=True)
 
-    print(result)
     return result
 
 
