@@ -41,6 +41,8 @@ def insert_predictions(connection: mysql.connector.MySQLConnection, y_series: pd
     """Insert inference results into MySQL, skipping rows with duplicate dates."""
     cursor = connection.cursor()
     sql = f"INSERT IGNORE INTO {INFERENCE_TABLE} (ticker, timeseries_datetime, prediction, raw_prediction, registered_model_name, model_version) VALUES (%s, %s, %s, %s, %s, %s)"
+    print(sql % (ticker, pd.Timestamp(y_series.index[0]).to_pydatetime(), float(y_series.values[0]), float(raw_prediction.values[0]), registered_model_name, model_version))
+    logger.info(sql % (ticker, pd.Timestamp(y_series.index[0]).to_pydatetime(), float(y_series.values[0]), float(raw_prediction.values[0]), registered_model_name, model_version))
     inserted_ids = []
     for date_val, prediction_val, raw_prediction_val in zip(y_series.index, y_series.values, raw_prediction.values):
         cursor.execute(sql, (ticker, pd.Timestamp(date_val).to_pydatetime(), float(prediction_val), float(raw_prediction_val), registered_model_name, model_version))
@@ -58,13 +60,15 @@ def insert_predictions(connection: mysql.connector.MySQLConnection, y_series: pd
     return inserted_ids
 
 
-def insert_db_order(connection: mysql.connector.MySQLConnection, result: pd.DataFrame, idx: int, ticker: str, order_side: int, price: float, stake: float, tp: float, sl: float) -> int:
+def insert_db_order(connection: mysql.connector.MySQLConnection, result: pd.DataFrame, idx: int, ticker: str, order_side: int, price: float, stake: float, tp: float, sl: float, logger: logging.Logger) -> int:
     cursor = connection.cursor()
     sql = (
         f"INSERT INTO {ORDERS_TABLE} "
         "(inference_id, timeseries_datetime, ticker, side, price, amount, tp, sl, status) "
         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
     )
+    print(sql % (0, pd.Timestamp(result.index[idx]).to_pydatetime(), ticker, order_side, price, stake, tp, sl, TRANSACTION_TYPE_TO_STATUS['PLANNED']))
+    logger.info(sql % (0, pd.Timestamp(result.index[idx]).to_pydatetime(), ticker, order_side, price, stake, tp, sl, TRANSACTION_TYPE_TO_STATUS['PLANNED']))
     cursor.execute(
         sql,
         (
@@ -85,11 +89,16 @@ def insert_db_order(connection: mysql.connector.MySQLConnection, result: pd.Data
     return inserted_id
 
 
-def update_order_from_marketbroker_response(connection: mysql.connector.MySQLConnection, inserted_id: int, order_id: int, active: bool, status: str, error: dict = None) -> None:
+def update_order_from_marketbroker_response(connection: mysql.connector.MySQLConnection, inserted_id: int, order_id: int, active: bool, status: str, error: dict, logger: logging.Logger) -> None:
     cursor = connection.cursor()
     sql = f"UPDATE {ORDERS_TABLE} SET active = %s, order_id = %s, status = %s, updated_at = NOW() WHERE id = %s"
+    print(sql % (active, order_id, TRANSACTION_TYPE_TO_STATUS[status], inserted_id))
+    logger.info(sql % (active, order_id, TRANSACTION_TYPE_TO_STATUS[status], inserted_id))
     cursor.execute(sql, (active, order_id, TRANSACTION_TYPE_TO_STATUS[status], inserted_id))
     if error is not None:
+        sql = f"UPDATE {ORDERS_TABLE} SET info = %s, status = %s, updated_at = NOW() WHERE id = %s"
+        print(sql % (error['info'], TRANSACTION_TYPE_TO_STATUS[status], inserted_id))
+        logger.info(sql % (error['info'], TRANSACTION_TYPE_TO_STATUS[status], inserted_id))
         cursor.execute(f"UPDATE {ORDERS_TABLE} SET info = %s, status = %s, updated_at = NOW() WHERE id = %s", (error['info'], TRANSACTION_TYPE_TO_STATUS[status], inserted_id))
     connection.commit()
     cursor.close()
@@ -129,19 +138,23 @@ def update_order_from_kafka_event(connection: mysql.connector.MySQLConnection, e
         match event_type:
             case 'PENDING':
                 sql = f'UPDATE {ORDERS_TABLE} SET status = %s, updated_at = NOW() WHERE order_id = %s and status = 0'
-                print(sql, (status, int(order_id)))
+                print(sql % (status, int(order_id)))
+                logger.info(sql % (status, int(order_id)))
                 cursor.execute(sql, (status, int(order_id)))
             case 'FILLED':
                 sql = f'UPDATE {ORDERS_TABLE} SET status = %s, position_id = %s, open_price = %s, updated_at = NOW() WHERE order_id = %s and status in (0,1)'
-                print(sql, (status, int(position_id), float(price), int(order_id)))
+                print(sql % (status, int(position_id), float(price), int(order_id)))
+                logger.info(sql % (status, int(position_id), float(price), int(order_id)))
                 cursor.execute(sql, (status, int(position_id), float(price), int(order_id)))
             case 'CLOSED':
                 sql = f'UPDATE {ORDERS_TABLE} SET active = 0, status = %s, close_price = %s, updated_at = NOW() WHERE order_id = %s and status = 2'
-                print(sql, (status, float(price), int(order_id)))
+                print(sql % (status, float(price), int(order_id)))
+                logger.info(sql % (status, float(price), int(order_id)))
                 cursor.execute(sql, (status, float(price), int(order_id)))
             case 'CANCELLED':
-                sql = f'UPDATE {ORDERS_TABLE} SET active = 0, status = %s, updated_at = NOW() WHERE order_id = %s and status in (5)'
-                print(sql, (status, int(order_id)))
+                sql = f'UPDATE {ORDERS_TABLE} SET active = 0, status = %s, updated_at = NOW() WHERE order_id = %s'      # and status in (5)
+                print(sql % (status, int(order_id)))
+                logger.info(sql % (status, int(order_id)))
                 cursor.execute(sql, (status, int(order_id)))
             case _:
                 logger.warning('Ignoring transaction event with unhandled type %s: %s', event_type, event)

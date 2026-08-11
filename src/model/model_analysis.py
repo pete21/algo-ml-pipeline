@@ -22,6 +22,7 @@ from src.model.mlflow_utils import (
 load_dotenv()
 
 TARGET_METRICS_DEFAULT = ('optimisation_score', 'total_profit')
+NUM_BEST_TRIALS = 10
 
 # logging configuration
 logger = logging.getLogger('model_analysis')
@@ -207,7 +208,7 @@ def main():
     model_params = load_model_params_from_experiment(experiment, logger=logger, run_name='Evaluation')
     print(f"Loaded model params: {model_params}")
 
-    positive_value_run_params = search_positive_value_runs(experiment)
+    positive_value_run_params = search_positive_value_runs(experiment, num_runs=NUM_BEST_TRIALS)
 
 
     trial_runs_df = fetch_trial_runs_dataframe(experiment_id)

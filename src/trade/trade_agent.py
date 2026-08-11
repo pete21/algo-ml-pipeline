@@ -194,7 +194,7 @@ def insert_db_marketbroker_order(
 
     price = round(price * (1 - order_side * ORDER_PRICE_SHIFT), 2)
 
-    inserted_id = insert_db_order(connection, result, idx, ticker, order_side, price, stake, tp, sl)
+    inserted_id = insert_db_order(connection, result, idx, ticker, order_side, price, stake, tp, sl, logger)
 
     if inserted_id is not None:
         print(f"Order inserted for {result.index[idx]}")
@@ -243,9 +243,9 @@ def insert_db_marketbroker_order(
             if response['status'] == 0:
                 active = bool(response['active'])
                 order_id = int(response['orderId'])
-                update_order_from_marketbroker_response(connection, inserted_id, order_id, active, 'PENDING', error=None)
+                update_order_from_marketbroker_response(connection, inserted_id, order_id, active, 'PENDING', error=None, logger=logger)
             else:
-                update_order_from_marketbroker_response(connection, inserted_id, 0, False, 'ERRORED', error={'info': json.dumps(response)})
+                update_order_from_marketbroker_response(connection, inserted_id, 0, False, 'ERRORED', error={'info': json.dumps(response)}, logger=logger)
 
             logger.info("Limit order request updated for prediction %s: %s", result.index[idx], response)
             print(f"Limit order request updated for prediction {result.index[idx]}: {response}")
@@ -253,7 +253,7 @@ def insert_db_marketbroker_order(
         except Exception as exc:
             logger.error("Error submitting limit order request to market API for prediction %s: %s", result.index[idx], exc)
             print(f"Error submitting limit order request to market API for prediction {result.index[idx]}: {exc}")
-            update_order_from_marketbroker_response(connection, inserted_id, 0, False, 'REJECTED', error={'info': str(exc)})
+            update_order_from_marketbroker_response(connection, inserted_id, 0, False, 'REJECTED', error={'info': str(exc)}, logger=logger)
 
     else:
         print(f"Order could not be inserted into database for {result.index[idx]}")
@@ -330,12 +330,12 @@ def run_cycle() -> None:
             pending_orders = [order for order in open_orders if order['status'] == 1]
             print(f"Number of pending orders: {len(pending_orders)}")
             for order in pending_orders:
-                if order['created_at'].astimezone(timezone.utc) < datetime.now(tz=timezone.utc) - timedelta(minutes=CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES):
+                if order['created_at'].timestamp() < datetime.now().timestamp() - CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES * 60:
                     cancelled = cancel_pending_order(order['order_id'])
                     if cancelled:
                         print(f"Updating cancelled order {order['id']} because it is older than {CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES} minutes")
                         logger.info("Updating cancelled order %s", order['id'])
-                        update_order_from_marketbroker_response(mysql_connection, order['id'], order['order_id'], True, 'CANCEL_PENDING', error={'message': f"Order is {datetime.now(tz=timezone.utc)-order['created_at'].astimezone(timezone.utc)} old (>{CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES} minutes)"})
+                        update_order_from_marketbroker_response(mysql_connection, order['id'], order['order_id'], True, 'CANCEL_PENDING', error={'info': f"Order is {round(datetime.now().timestamp()-order['created_at'].timestamp())} seconds old (>{CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES} minutes permitted)"}, logger=logger)
                         logger.info("Cancelled pending order %s because it is older than %d minutes", order['order_id'], CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES)
                     else:
                         logger.error("Failed to cancel pending order %s", order['order_id'])

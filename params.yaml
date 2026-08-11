@@ -157,14 +157,16 @@ model_building:
   version: 1
   model_type: 'svr_regression'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 500
+  n_trials: 300
   num_splits: 25
   project_name: 'svr-dax-pipeline'
   evals_strategy: False
   local_timezone: 'Europe/Berlin'
 
 model_evaluation:
-  dummy: True
+  experiment_id = 109
+  num_best_trials = 10
+  num_evaluations_per_trial = 10
 
 model_analysis:
   target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor', 'total_trades']

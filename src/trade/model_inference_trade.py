@@ -3,13 +3,12 @@ import os
 from datetime import date, datetime
 
 import dvc.api
-import numpy as np
 import pandas as pd
 import pytz
 import requests
 from dotenv import load_dotenv
 
-from src.backtesting.optimization import drop_ohlc_columns
+# from src.backtesting.optimization import drop_ohlc_columns
 from src.data_utils.utils import getXy
 
 load_dotenv()
@@ -17,7 +16,6 @@ load_dotenv()
 PREDICT_URL = os.getenv("MODEL_PREDICT_URL", "http://localhost:8100/predict")
 MODEL_PARAMS_URL = os.getenv("MODEL_PARAMS_URL", "http://localhost:8100/model/params")
 MODEL_INFO_URL = os.getenv("MODEL_INFO_URL", "http://localhost:8100/")
-
 
 
 def load_data(data_path: str, params: dict, logger: logging.Logger) -> dict:
@@ -106,8 +104,6 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
 
         model_params = fetch_model_params(url=MODEL_PARAMS_URL, logger=logger)
         print(f"Model params: {model_params}")
-        # model_params['hour_range_start'] = 6*60
-        model_params['hour_range_stop'] = 18*60
 
         p={}
         for i in params['model_building']['indexes_higher']:
@@ -129,9 +125,15 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         col_open="Open", col_high="High", col_low="Low", col_close="Close"
         )
 
-        print(X.columns)
-        X = drop_ohlc_columns(X, params['model_building']['list_X'])
-        print(X.columns)
+        model_params['hour_range_start'] = 0*60
+        model_params['hour_range_stop'] = 20*60
+        X = X.loc[(X['minute_of_day']>=model_params['hour_range_start']) & (X['minute_of_day']<model_params['hour_range_stop'])]                # limit trading hours
+
+        # print(X.columns.values)
+        to_drop = ['minute_of_day', 'local_date']
+        X = X.drop(columns=to_drop)
+        # X = drop_ohlc_columns(X, params['model_building']['list_X'])                  # do not drop Close as it will be used to calculate order limit price
+        # print(X.columns)
 
         # X.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'X.csv'), index=True)
         print(X.tail())

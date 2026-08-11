@@ -1,10 +1,11 @@
-import pandas as pd
-import os
 import logging
-import requests
-from sqlalchemy import Connection, create_engine, text
-from dotenv import load_dotenv
+import os
+
 import dvc.api
+import pandas as pd
+import requests
+from dotenv import load_dotenv
+from sqlalchemy import Connection, create_engine, text
 
 FETCH_URLS = {                                                                      # SELECT quoteid,marketid FROM `marketquotes` WHERE quoteid in (6374,16917,872703);
     'DAX40': 'https://charts.finsatechnology.com/data/minute/17068/mid',

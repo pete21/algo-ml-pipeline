@@ -109,8 +109,8 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
     col_y = params['col_y']
     lags = params['lags']
     
-    print("Trial: ", trial.number if trial else "Evaluation")
-    run_name = f"Trial_{trial.number}" if trial else "Evaluation"
+    print("Trial: ", trial.number if trial else f"Evaluation_{params['run_name']}")
+    run_name = f"Trial_{trial.number}" if trial else f"Evaluation_{params['run_name']}"
     # Set tracking URI
     print("Setting MLFlow tracking and experiment ID...")
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
@@ -219,7 +219,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             # 'num_leaves':  trial.suggest_int('num_leaves', 10, 200),
 
             # SVR and SVC parameters
-            'C': trial.suggest_float('C', 0.3, 0.3, step=0.05),
+            'C': trial.suggest_float('C', 0.3, 0.4, step=0.05),
             'epsilon': trial.suggest_float('epsilon', 0.375, 0.375, step=0.025),    # 0.3,0.5
         }
 

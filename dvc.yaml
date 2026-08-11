@@ -88,7 +88,9 @@ stages:
     - ${model_building.data_path}/data_static_features_1h.csv
     - src/model/model_evaluation.py
     params:
-    - model_evaluation.dummy
+    - model_evaluation.experiment_id
+    - model_evaluation.num_best_trials
+    - model_evaluation.num_evaluations_per_trial
     # - model_evaluation.models_path
     # - model_evaluation.timeframe
     # - model_evaluation.index_base

@@ -41,12 +41,12 @@ def create_mlflow_experiment(experiment_name: str, mlflow_tracking_uri: str, tag
     return experiment_id
 
 
-def find_latest_experiment(client: MlflowClient, tags: dict):
+def find_latest_experiment(client: MlflowClient, tags: dict, experiment_id: int | None = None):
     """Find the most recent MLflow experiment tagged for the building stage."""
     filter_string = " AND ".join(
         f"tags.{key} = '{value}'" for key, value in tags.items()
     )
-    experiments = client.search_experiments(filter_string=filter_string)
+    experiments = client.search_experiments(filter_string=filter_string) if experiment_id is None else [client.get_experiment(experiment_id)]
     if not experiments:
         raise ValueError(
             f"No MLflow experiments found with tags: {tags}"
@@ -122,7 +122,7 @@ def load_model_params_from_experiment(experiment: Experiment, logger: logging.Lo
 
 
 # Search all positive value runs and return run params
-def search_positive_value_runs(experiment: Experiment) -> list[dict]:
+def search_positive_value_runs(experiment: Experiment, num_runs: int = 10) -> list[dict]:
     """Search all positive value runs and return the run params of them."""
     runs = mlflow.search_runs(
         experiment_ids=[experiment.experiment_id],
@@ -136,9 +136,9 @@ def search_positive_value_runs(experiment: Experiment) -> list[dict]:
     runs = runs.sort_values(by="metrics.optimisation_score", ascending=False)
     # Extract columns with "params" prefix
     params_columns = [col for col in runs.columns if col.startswith("params.")]
-    runs = runs[params_columns + ["metrics.optimisation_score"]]
+    runs = runs[params_columns + ["metrics.optimisation_score", "metrics.win_rate", "metrics.total_trades", "metrics.sharpe_ratio", "metrics.total_profit", "tags.mlflow.runName"]]
     # print(runs.to_dict(orient="records"))
-    return runs.iloc[:10].to_dict(orient="records")
+    return runs.iloc[:num_runs].to_dict(orient="records")
 
 
 def save_model_params(model_params: dict, file_path: str, logger: logging.Logger = None) -> None:
