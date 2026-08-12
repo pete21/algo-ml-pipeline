@@ -3,11 +3,10 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import mysql.connector
 import pandas as pd
-import requests
 from dotenv import load_dotenv
 from kafka import KafkaConsumer
 
@@ -17,40 +16,35 @@ from src.trade.db_utils import (
     get_open_orders,
     insert_db_order,
     insert_predictions,
-    sleep_until_next_cycle,
     update_order_from_kafka_event,
     update_order_from_marketbroker_response,
 )
-from src.trade.model_inference_trade import fetch_model_info
 from src.trade.model_inference_trade import main as model_inference_trade_main
+from src.trade.utils_marketbroker import (
+    cancel_pending_order,
+    get_current_price,
+    submit_limit_order,
+)
+from src.trade.utils_model_serving import fetch_model_info
 
 load_dotenv()
+
 EXECUTE_ORDER_THRESHOLD = 1
 ORDER_PRICE_SHIFT = 0.0002
 
 INTERVAL_MINUTES = 5
 SCHEDULE_OFFSET_SECONDS = 5
 
-CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES = 11 # maximum lifetime of a pending order, then it is is cancelled by the trade agent
+CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES = INTERVAL_MINUTES+1 # maximum lifetime of a pending order, then it is is cancelled by the trade agent
 
 TICKER = 'DAX40'
-ORDER_API_URL = os.getenv('ORDER_API_URL', 'http://localhost:8080/orders')
-INSTRUMENTS_API_URL = os.getenv('INSTRUMENTS_API_URL', 'http://localhost:8080/instruments')
+
 ORDER_MODE_MARKET = 0
 ORDER_MODE_LIMIT = 1
 ORDER_STAKE = 0.5
 KAFKA_URL = os.getenv('KAFKA_URL', 'localhost:9092')
 KAFKA_TOPIC = os.getenv('KAFKA_TOPIC', 'MARKETBROKER.LOCAL.TRANSACTIONS_TOPIC')
 KAFKA_CONSUMER_GROUP = os.getenv('KAFKA_CONSUMER_GROUP', 'trade-agent-transactions')
-
-
-# Example market/quote IDs keyed by ticker symbol.
-TICKER_MARKET_MAP: dict[str, dict[str, int]] = {
-    'DAX40': {'marketId': 17068, 'quoteId': 6374},
-    'NQ100': {'marketId': 20190, 'quoteId': 16917},
-    'SP500': {'marketId': 67995, 'quoteId': 872703},
-    'Bitcoin': {'marketId': 67476, 'quoteId': 870964},
-}
 
 
 # Logging configuration
@@ -70,84 +64,6 @@ file_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
-
-def cancel_pending_order(order_id: int) -> bool:
-    """Cancel a pending order."""
-    url = f"{ORDER_API_URL}/{order_id}"
-    try:
-        response = requests.delete(
-            url,
-        )
-        return response.status_code == 200
-    except requests.exceptions.RequestException as exc:
-        logger.error("Order %s cancellation failed: %s", order_id, exc)
-        return False
-
-def submit_limit_order(
-    ticker: str,
-    order_mode: int,
-    direction: int,
-    stake: float,
-    price: float = 0.0,
-    stop_order_price: float = 0.0,
-    limit_order_price: float = 0.0,
-    trailing_point: bool = False,
-    url: str = ORDER_API_URL
-) -> dict:
-    """Submit a limit order to the external order API."""
-    if ticker not in TICKER_MARKET_MAP:
-        raise ValueError(f"No market mapping configured for ticker: {ticker}")
-
-    market = TICKER_MARKET_MAP[ticker]
-    payload = {
-        'marketId': market['marketId'],
-        'quoteId': market['quoteId'],
-        'price': float(price),
-        'stake': float(stake),
-        'direction': direction,
-        'orderMode': order_mode,
-        'limitOrderPrice': float(limit_order_price),
-        'stopOrderPrice': float(stop_order_price),
-        'trailingPoint': trailing_point,
-    }
-    print(payload)
-
-    try:
-        response = requests.post(
-            url,
-            json=payload
-        )
-        return response.json()
-    except requests.exceptions.RequestException as exc:
-        logger.error("Limit order request failed: %s", exc)
-        raise
-
-# Query /instruments/ticks to get the current price of the ticker
-def get_current_price(ticker: str, side: str) -> float:
-    quote_id = TICKER_MARKET_MAP[ticker]['quoteId']
-    if side not in ['bid', 'ask']:
-        logger.error("Invalid side: %s", side)
-        return None
-    '''
-    Example response:
-    [
-    { "quoteId": 6374, "bid": 24976.4, "ask": 24977.4, "time": 1784884288, "millis": 299},
-    { "quoteId": 16917, "bid": 24976.5, "ask": 24977.5, "time": 1784884288, "millis": 299},
-    ]
-    '''
-    url = f"{INSTRUMENTS_API_URL}/ticks"
-    response = requests.get(url)
-    if response.status_code != 200:
-        logger.error("Failed to get current price for %s: %s", ticker, response.status_code)
-        print(f"Failed to get current price for {ticker}: {response.status_code}")
-        return None
-    json_response = response.json()
-    for item in json_response:
-        if item['quoteId'] == quote_id:
-            return item[side]
-    logger.error("Failed to find quoteId %s in ticks response", quote_id)
-    print(f"Failed to find quoteId {quote_id} in ticks response")
-    return None
 
 def insert_db_marketbroker_order(
     connection: mysql.connector.MySQLConnection,
@@ -188,7 +104,7 @@ def insert_db_marketbroker_order(
         raise ValueError(f"Invalid side: {side}")
 
     # Get the current price of the ticker
-    current_price = get_current_price(ticker, 'ask' if side == 'buy' else 'bid')
+    current_price = get_current_price(ticker=ticker, side='ask' if side == 'buy' else 'bid', logger=logger)
     if current_price is not None:
         price = (price + current_price) / 2                     # Adjust the price to the average of the current market price and the last closed candle price
 
@@ -202,6 +118,7 @@ def insert_db_marketbroker_order(
 
         try:
             response = submit_limit_order(
+                logger=logger,
                 ticker=ticker,
                 order_mode=ORDER_MODE_LIMIT,
                 direction=order_side,
@@ -210,7 +127,6 @@ def insert_db_marketbroker_order(
                 stop_order_price=sl,
                 limit_order_price=tp,
                 trailing_point=False,
-                url=ORDER_API_URL,
             )
 # Request body:
 # {
@@ -302,9 +218,39 @@ def kafka_listener_loop(stop_event: threading.Event) -> None:
                 consumer.close()
 
 
+def _sleep_until_next_cycle(logger: logging.Logger, interval_minutes: int = 5, schedule_offset_seconds: int = 5) -> datetime:
+    """Block until the next scheduled cycle time."""
+    now = datetime.now()
+    target = _next_scheduled_time(now=now, interval_minutes=interval_minutes, schedule_offset_seconds=schedule_offset_seconds)
+    sleep_seconds = (target - now).total_seconds()
+    if sleep_seconds > 0:
+        logger.info(
+            "Sleeping %.1f seconds until next cycle at %s",
+            sleep_seconds,
+            target.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        time.sleep(sleep_seconds)
+    return target
+
+def _next_scheduled_time(now: datetime | None = None, interval_minutes: int = 5, schedule_offset_seconds: int = 5) -> datetime:
+    """Return the next run time aligned to 5-minute boundaries plus offset (e.g. :05:05, :10:05)."""
+    now = now or datetime.now()
+    current = now.replace(microsecond=0)
+    seconds_into_hour = current.minute * 60 + current.second
+    interval_seconds = interval_minutes * 60
+    slot_start = (seconds_into_hour // interval_seconds) * interval_seconds
+    candidate = current.replace(minute=0, second=0) + timedelta(
+        seconds=slot_start + schedule_offset_seconds
+    )
+    if candidate < now:
+        candidate += timedelta(seconds=interval_seconds)
+    return candidate
+
+
+
 def run_cycle() -> None:
     """Run a single cycle of the trade agent."""
-    model_info = fetch_model_info(logger)
+    model_info = fetch_model_info(logger=logger)
     registered_model_name = model_info['registered_model_name']
     model_version = model_info['model_version']
 
@@ -330,12 +276,12 @@ def run_cycle() -> None:
             pending_orders = [order for order in open_orders if order['status'] == 1]
             print(f"Number of pending orders: {len(pending_orders)}")
             for order in pending_orders:
-                if order['created_at'].timestamp() < datetime.now().timestamp() - CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES * 60:
-                    cancelled = cancel_pending_order(order['order_id'])
+                if order['created_at'].timestamp() < datetime.now().timestamp()-7200 - CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES * 60:
+                    cancelled = cancel_pending_order(order['order_id'], logger=logger)
                     if cancelled:
                         print(f"Updating cancelled order {order['id']} because it is older than {CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES} minutes")
                         logger.info("Updating cancelled order %s", order['id'])
-                        update_order_from_marketbroker_response(mysql_connection, order['id'], order['order_id'], True, 'CANCEL_PENDING', error={'info': f"Order is {round(datetime.now().timestamp()-order['created_at'].timestamp())} seconds old (>{CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES} minutes permitted)"}, logger=logger)
+                        update_order_from_marketbroker_response(mysql_connection, order['id'], order['order_id'], True, 'CANCEL_PENDING', error={'info': f"Order is {round(datetime.now().timestamp()-7200-order['created_at'].timestamp())} seconds old (>{CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES} minutes permitted)"}, logger=logger)
                         logger.info("Cancelled pending order %s because it is older than %d minutes", order['order_id'], CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES)
                     else:
                         logger.error("Failed to cancel pending order %s", order['order_id'])
@@ -352,7 +298,7 @@ def run_cycle() -> None:
             return
 
         orders_inserted_ids = []
-        if abs(result.y_pred.iloc[idx]) > EXECUTE_ORDER_THRESHOLD and result.index[idx].tz_localize(timezone.utc) < datetime.now(tz=timezone.utc) - timedelta(minutes=10):
+        if abs(result.y_pred.iloc[idx]) > EXECUTE_ORDER_THRESHOLD and result.index[idx].timestamp() < datetime.now().timestamp()-7200-600:
             print(f"Skipping order insertion for {result.index[idx]} because it is older than 5 minutes")
             logger.warning("Skipping order insertion for %s because it is older than 5 minutes", result.index[idx])
         else:
@@ -389,7 +335,7 @@ def main() -> None:
     kafka_thread.start()
     logger.info('Kafka transactions event listener thread started.')
     while True:
-        scheduled_at = sleep_until_next_cycle(logger, INTERVAL_MINUTES, SCHEDULE_OFFSET_SECONDS)
+        scheduled_at = _sleep_until_next_cycle(logger=logger, interval_minutes=INTERVAL_MINUTES, schedule_offset_seconds=SCHEDULE_OFFSET_SECONDS)
         logger.info("Cycle start time: %s (scheduled: %s)", datetime.now(), scheduled_at)
         try:
             run_cycle()

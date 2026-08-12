@@ -79,7 +79,7 @@ def main():
         model_params = load_model_params_from_experiment(experiment, logger=logger, run_name=run_name)
         print(f"Loaded model params: {model_params}")
 
-        params['run_name'] = run_name
+        model_building_params['run_name'] = run_name
         for i in range(num_evaluations_per_trial):
             print(f"Evaluation {i+1} of {NUM_EVALUATIONS_PER_TRIAL} for run {run_name}")
             optimisation_score = objective(None, data, model_building_params, cutoff_date, unique_weekdates, experiment_id, model_params_override=model_params)

@@ -119,7 +119,8 @@ stages:
     - ${model_building.data_path}/data_static_features_1h.csv
     - src/model/model_registration.py
     params:
-    - model_evaluation.dummy
+    - model_registration.experiment_id
+    - model_registration.run_name
     - model_registration.model_tag
 
 

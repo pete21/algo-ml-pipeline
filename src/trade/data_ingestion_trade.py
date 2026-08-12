@@ -48,7 +48,7 @@ def load_data_from_questdb(params: dict, connection: Connection, logger: logging
                 "gaps_table" : params['data_ingestion_trade']['gaps_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion_trade']['timeframes'][i].upper()),
                 "start_date" : params['data_ingestion_trade']['start_date']
             }
-            print(query % query_params)
+            # print(query % query_params)
             data[i] = pd.read_sql_query(query, con=connection, params=query_params, index_col='date', parse_dates=['date'])
             data[i] = data[i].iloc[:-1]     # remove last row of unfinished candle
             print(data[i].tail())
@@ -72,7 +72,7 @@ def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
             if i != params['data_ingestion_trade']['index_base']:
                 data[i].drop(columns=['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'minute_of_day'], inplace=True)
 
-            print(data[i].tail())
+            # print(data[i].tail())
 
         return data
     except Exception as e:

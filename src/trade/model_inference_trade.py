@@ -5,17 +5,10 @@ from datetime import date, datetime
 import dvc.api
 import pandas as pd
 import pytz
-import requests
-from dotenv import load_dotenv
 
 # from src.backtesting.optimization import drop_ohlc_columns
 from src.data_utils.utils import getXy
-
-load_dotenv()
-
-PREDICT_URL = os.getenv("MODEL_PREDICT_URL", "http://localhost:8100/predict")
-MODEL_PARAMS_URL = os.getenv("MODEL_PARAMS_URL", "http://localhost:8100/model/params")
-MODEL_INFO_URL = os.getenv("MODEL_INFO_URL", "http://localhost:8100/")
+from src.trade.utils_model_serving import fetch_model_params, request_predictions
 
 
 def load_data(data_path: str, params: dict, logger: logging.Logger) -> dict:
@@ -49,41 +42,7 @@ def load_data(data_path: str, params: dict, logger: logging.Logger) -> dict:
         logger.error('Unexpected error occurred while loading the data: %s', e)
         raise
 
-def request_predictions(X: pd.DataFrame, url: str, n_rows: int, logger: logging.Logger) -> dict:
-    """POST the last n rows of X to the model serving /predict endpoint."""
-    sample = X.tail(n_rows)
-    payload = {
-        "columns": sample.columns.tolist(),
-        "data": sample.values.tolist(),
-    }
-    try:
-        response = requests.post(
-            url,
-            json=payload
-        )
-        return response.json()
-    except requests.exceptions.RequestException as exc:
-        logger.error("Prediction request failed: %s", exc)
-        raise
 
-
-def fetch_model_params(url: str, logger: logging.Logger) -> dict:
-    """Fetch model_params from the model serving endpoint."""
-    response = requests.get(url)
-    try:
-        return response.json()
-    except requests.exceptions.RequestException as exc:
-        logger.error("Model params request failed: %s", exc)
-        raise
-
-def fetch_model_info(logger: logging.Logger) -> dict:
-    """Fetch model info from the model serving endpoint."""
-    response = requests.get(MODEL_INFO_URL)
-    try:
-        return response.json()
-    except requests.exceptions.RequestException as exc:
-        logger.error("Model info request failed: %s", exc)
-        raise
 
 
 def main(logger: logging.Logger) -> pd.DataFrame | None:
@@ -102,7 +61,7 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         data = load_data(data_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'), params=params, logger=logger)
         data[params['model_building']['index_base']].loc[:,"target"] = 0
 
-        model_params = fetch_model_params(url=MODEL_PARAMS_URL, logger=logger)
+        model_params = fetch_model_params(logger=logger)
         print(f"Model params: {model_params}")
 
         p={}
@@ -140,7 +99,7 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         # print(y.head())
         # print(columns)
         num_rows = 10
-        predictions = request_predictions(X, url=PREDICT_URL, n_rows=num_rows, logger=logger)
+        predictions = request_predictions(X=X, n_rows=num_rows, logger=logger)
         print(f"Received {len(predictions.get('predictions', []))} predictions")
         print(predictions)
         # for i in predictions['predictions']:

@@ -10,7 +10,7 @@ from mlflow.tracking import MlflowClient
 
 load_dotenv()
 
-def create_mlflow_experiment(experiment_name: str, mlflow_tracking_uri: str, tags: dict = {}, logger: logging.Logger = None)->str:
+def create_mlflow_experiment(experiment_name: str, mlflow_tracking_uri: str, tags: dict = {}, logger: logging.Logger | None = None)->str:
     """
     Function to create an MLFlow experiment with a defined experiment name.
     """
@@ -66,7 +66,7 @@ def fetch_trial_runs_dataframe(experiment_id: str) -> pd.DataFrame:
     return runs_df
 
 
-def load_model_params_from_experiment(experiment: Experiment, logger: logging.Logger, run_name: str = None) -> dict:
+def load_model_params_from_experiment(experiment: Experiment, logger: logging.Logger, run_name: str | None = None) -> dict:
     """Load model_params artifact from the best run of the latest experiment."""
     if run_name:
         best_run_name = run_name
@@ -121,7 +121,7 @@ def load_model_params_from_experiment(experiment: Experiment, logger: logging.Lo
     return model_params
 
 
-# Search all positive value runs and return run params
+# Search positive value runs and return run params
 def search_positive_value_runs(experiment: Experiment, num_runs: int = 10) -> list[dict]:
     """Search all positive value runs and return the run params of them."""
     runs = mlflow.search_runs(
@@ -141,7 +141,7 @@ def search_positive_value_runs(experiment: Experiment, num_runs: int = 10) -> li
     return runs.iloc[:num_runs].to_dict(orient="records")
 
 
-def save_model_params(model_params: dict, file_path: str, logger: logging.Logger = None) -> None:
+def save_model_params(model_params: dict, file_path: str, logger: logging.Logger | None = None) -> None:
     """Save the trained model parameters to a file."""
     try:
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -176,7 +176,7 @@ def find_latest_model_version(client: MlflowClient, model_name: str) -> int:
     # print(f"Model version aliases: {max_version.aliases}")
     return max_version
 
-def set_alias_to_model_version(client: MlflowClient, model_name: str, version: int, alias: str, logger: logging.Logger = None) -> None:
+def set_alias_to_model_version(client: MlflowClient, model_name: str, version: int, alias: str, logger: logging.Logger | None = None) -> None:
     """Set an alias to a model version."""
     try:
         if logger:

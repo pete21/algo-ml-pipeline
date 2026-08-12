@@ -157,25 +157,25 @@ model_building:
   version: 1
   model_type: 'svr_regression'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 300
+  n_trials: 500
   num_splits: 25
   project_name: 'svr-dax-pipeline'
   evals_strategy: False
   local_timezone: 'Europe/Berlin'
 
 model_evaluation:
-  experiment_id = 109
-  num_best_trials = 10
-  num_evaluations_per_trial = 10
+  experiment_id: 110
+  num_best_trials: 5
+  num_evaluations_per_trial: 10
 
 model_analysis:
   target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor', 'total_trades']
   analysis_path: 'data/models/analysis'
 
 model_registration:
-  dummy: True
+  experiment_id: 109
+  run_name: 'Trial_664'
   model_tag: 'Staging'
-
 
 data_ingestion_trade:
   table_name: 'DUKASCOPY_{ticker}_OHLC_{timeframe}'

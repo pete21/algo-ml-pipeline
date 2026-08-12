@@ -1,7 +1,5 @@
 import logging
 import os
-import time
-from datetime import datetime, timedelta
 
 import mysql.connector
 import pandas as pd
@@ -18,6 +16,7 @@ TRANSACTION_TYPE_TO_STATUS = {
     'CANCEL_PENDING': 5,
     'CANCELLED': 6,
 }
+
 
 def _parse_mysql_host_port(mysql_url: str) -> tuple[str, int]:
     if ':' in mysql_url:
@@ -169,30 +168,3 @@ def update_order_from_kafka_event(connection: mysql.connector.MySQLConnection, e
     finally:
         cursor.close()
 
-
-def sleep_until_next_cycle(logger: logging.Logger, interval_minutes: int = 5, schedule_offset_seconds: int = 5) -> datetime:
-    """Block until the next scheduled cycle time."""
-    target = _next_scheduled_time(interval_minutes=interval_minutes, schedule_offset_seconds=schedule_offset_seconds)
-    sleep_seconds = (target - datetime.now()).total_seconds()
-    if sleep_seconds > 0:
-        logger.info(
-            "Sleeping %.1f seconds until next cycle at %s",
-            sleep_seconds,
-            target.strftime("%Y-%m-%d %H:%M:%S"),
-        )
-        time.sleep(sleep_seconds)
-    return target
-
-def _next_scheduled_time(now: datetime | None = None, interval_minutes: int = 5, schedule_offset_seconds: int = 5) -> datetime:
-    """Return the next run time aligned to 5-minute boundaries plus offset (e.g. :05:05, :10:05)."""
-    now = now or datetime.now()
-    current = now.replace(microsecond=0)
-    seconds_into_hour = current.minute * 60 + current.second
-    interval_seconds = interval_minutes * 60
-    slot_start = (seconds_into_hour // interval_seconds) * interval_seconds
-    candidate = current.replace(minute=0, second=0) + timedelta(
-        seconds=slot_start + schedule_offset_seconds
-    )
-    if candidate < now:
-        candidate += timedelta(seconds=interval_seconds)
-    return candidate
