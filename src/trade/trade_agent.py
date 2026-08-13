@@ -253,6 +253,8 @@ def run_cycle() -> None:
     model_info = fetch_model_info(logger=logger)
     registered_model_name = model_info['registered_model_name']
     model_version = model_info['model_version']
+    print(f"Model info: {registered_model_name} {model_version}")
+    logger.info("Model info: %s %s", registered_model_name, model_version)
 
     logger.info("Starting data ingestion...")
     data_ingestion_trade_main(logger)

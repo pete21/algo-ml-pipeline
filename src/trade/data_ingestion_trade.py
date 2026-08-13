@@ -20,19 +20,16 @@ questdb_url = os.getenv('QUESTDB_URL')
 questdb_user = os.getenv('QUESTDB_USER')
 questdb_password = os.getenv('QUESTDB_PASSWORD')
 
-# QUERY_TEMPLATE = """SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s where timestamp>=%(start_date)s
-# UNION
-# SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(tickstream_table)s where timestamp > (select max(timestamp) FROM %(table)s);"""
 
-QUERY_TEMPLATE = """SELECT timestamp as date, first(open) as Open, max(high) as High, min(low) as Low, last(close) as Close FROM
+QUERY_TEMPLATE = """SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s where timestamp>=%(start_date)s
+UNION
+select timestamp, first(open), max(high), min(low), last(close) from (
+SELECT timestamp, first(open) as open, max(high) as high, min(low) as low, first(close) as close FROM
 (
-SELECT timestamp, open, high, low, close FROM %(table)s where timestamp>=%(start_date)s
+SELECT timestamp, open, high, low, close FROM %(gaps_table_1m)s where timestamp > (select max(timestamp) FROM  %(table_1m)s)
 UNION
-SELECT timestamp, open, high, low, close FROM %(gaps_table)s where timestamp > (select max(timestamp) FROM %(table)s)
-UNION
-SELECT timestamp, open, high, low, close FROM %(tickstream_table)s where timestamp > (select max(timestamp) FROM %(table)s)
-) group by date;"""
-
+SELECT timestamp, open, high, low, close FROM %(tickstream_table_1m)s where timestamp > (select max(timestamp) FROM %(table_1m)s)
+) group by timestamp order by timestamp) sample by """
 
 
 def load_data_from_questdb(params: dict, connection: Connection, logger: logging.Logger) -> dict:
@@ -40,18 +37,18 @@ def load_data_from_questdb(params: dict, connection: Connection, logger: logging
     try:
         data = {}
         for i in params['data_ingestion_trade']['indexes_higher'] + [params['data_ingestion_trade']['index_base']]:
-            # query = "SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s WHERE timestamp > '2026-03-01';"
-            query = QUERY_TEMPLATE
+            query = QUERY_TEMPLATE + params['data_ingestion_trade']['timeframes'][i].lower()
             query_params = {
                 "table" : params['data_ingestion_trade']['table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion_trade']['timeframes'][i].upper()),
-                "tickstream_table" : params['data_ingestion_trade']['tickstream_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion_trade']['timeframes'][i].upper()),
-                "gaps_table" : params['data_ingestion_trade']['gaps_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion_trade']['timeframes'][i].upper()),
-                "start_date" : params['data_ingestion_trade']['start_date']
+                "table_1m" : params['data_ingestion_trade']['table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe='1M'),
+                "tickstream_table_1m" : params['data_ingestion_trade']['tickstream_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe='1M'),
+                "gaps_table_1m" : params['data_ingestion_trade']['gaps_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe='1M'),
+                "start_date" : params['data_ingestion_trade']['start_date'],
             }
-            # print(query % query_params)
+            # print(f"Query: {query % query_params}")
             data[i] = pd.read_sql_query(query, con=connection, params=query_params, index_col='date', parse_dates=['date'])
             data[i] = data[i].iloc[:-1]     # remove last row of unfinished candle
-            print(data[i].tail())
+            # print(data[i].tail())
         return data
 
     except Exception as e:

@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from src.backtesting.optimization import objective
 from src.data_utils.utils import get_dates
-from src.model.mlflow_utils import create_mlflow_experiment, save_model_params
+from src.model.mlflow_utils import create_mlflow_experiment
 
 load_dotenv()
 

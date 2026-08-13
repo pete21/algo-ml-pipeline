@@ -39,7 +39,6 @@ logger.addHandler(file_handler)
 
 
 
-
 def main():
 
     # Load parameters from the root directory
