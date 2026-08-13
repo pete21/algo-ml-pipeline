@@ -33,6 +33,8 @@ file_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
+def ceiling_division(n, d):
+    return -(n // -d)
 
 def load_data(data_path: str, params: dict) -> dict:
     """Load data from a CSV file."""
@@ -59,6 +61,10 @@ def load_data(data_path: str, params: dict) -> dict:
                 + pd.to_timedelta(params['timeframe_minutes'][i], "m")
                 - pd.to_timedelta(params['timeframe_minutes'][params['index_base']], "m")
             )
+
+            # for each value of data[i]["date_merge"], if minute value of data[i]["date_merge"] is not divisible by params['timeframe_minutes'][params['index_base']], set the minute value to the next divisible value greater than the current value
+            data[i]["date_merge"] = data[i]["date_merge"].apply(lambda x: x.replace(minute=ceiling_division(x.minute, params['timeframe_minutes'][params['index_base']]) * params['timeframe_minutes'][params['index_base']]))
+
             print(data[i].head())
 
         logger.debug('Data loaded from %s', data_path)
@@ -186,12 +192,6 @@ def main():
         print("Best trial number: ", study.best_trial.number)
         print("Best parameters: ", study.best_params)
         print("Best score:", study.best_value)
-
-
-        # Save the trained model in the root directory
-        # print("Saving model parameters to json...")                                   # Saved with every run, not needed here
-        # model_params_path = os.path.join(params['models_path'], params['model_params_name'].format(timeframe=params['timeframe'], version=params['version']))
-        # save_model_params(model_params=study.best_params, file_path=model_params_path, logger=logger)
 
 
         print("Saving study trials to csv...")

@@ -71,8 +71,8 @@ def submit_limit_order(
         logger.error("Limit order request failed: %s", exc)
         raise
 
-def close_position(ticker: str, order_id: int, direction: int, logger: logging.Logger) -> bool:
-    """Close a position."""
+def close_position(ticker: str, order_id: int, logger: logging.Logger) -> dict:
+    """Close a position by order id"""
     if ticker not in TICKER_MARKET_MAP:
         logger.error(f"No market mapping configured for ticker: {ticker}")
         raise ValueError(f"No market mapping configured for ticker: {ticker}")
@@ -83,8 +83,8 @@ def close_position(ticker: str, order_id: int, direction: int, logger: logging.L
         "quoteId": market['quoteId'],
         "price": 0,
         "stake": 0,
-        "direction": direction,
-        "orderMode": 5,
+        "direction": 0,
+        "orderMode": 4,
         "limitOrderPrice": 0,
         "stopOrderPrice": 0,
         "trailingPoint": False,

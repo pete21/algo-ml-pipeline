@@ -126,76 +126,76 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
         model_params = model_params_override or {
 
-            'sma1_period': trial.suggest_int('sma1_period', 12, 12),
-            'sma2_period': trial.suggest_int('sma2_period', 85, 86), 
-            'bb_periods': trial.suggest_int('bb_periods', 43, 43),
+            'sma1_period': trial.suggest_int('sma1_period', 11, 13),
+            'sma2_period': trial.suggest_int('sma2_period', 84, 88), 
+            'bb_periods': trial.suggest_int('bb_periods', 42, 45),
             'bb_nbdev': trial.suggest_float('bb_nbdev', 1.95, 2.05),
-            'ema1_period': trial.suggest_int('ema1_period', 4, 4),
-            'ema2_period': trial.suggest_int('ema2_period', 22, 22),
-            'sar_acc': trial.suggest_float('sar_acc', 0.46, 0.5), 
-            'sar_max': trial.suggest_float('sar_max', 0.62, 0.68), 
+            'ema1_period': trial.suggest_int('ema1_period', 3, 6),
+            'ema2_period': trial.suggest_int('ema2_period', 20, 25),
+            'sar_acc': trial.suggest_float('sar_acc', 0.45, 0.55), 
+            'sar_max': trial.suggest_float('sar_max', 0.6, 0.7), 
             'midprice_window': trial.suggest_int('midprice_window', 2, 2), # 2,30
-            'l1_fast': trial.suggest_int('l1_fast', 8, 9), # 15,3,10
-            'l2_fast': trial.suggest_int('l2_fast', 6, 6), 
-            'l3_fast': trial.suggest_int('l3_fast', 16, 16), 
-            'l1_slow': trial.suggest_int('l1_slow', 37, 39), 
-            'l2_slow': trial.suggest_int('l2_slow', 6, 6),
-            'l3_slow': trial.suggest_int('l3_slow', 30, 30),
-            'kama_trend_period': trial.suggest_int('kama_trend_period', 34, 34),
+            'l1_fast': trial.suggest_int('l1_fast', 6, 9), # 15,3,10
+            'l2_fast': trial.suggest_int('l2_fast', 4, 7), 
+            'l3_fast': trial.suggest_int('l3_fast', 14, 18), 
+            'l1_slow': trial.suggest_int('l1_slow', 35, 40), 
+            'l2_slow': trial.suggest_int('l2_slow', 4, 7),
+            'l3_slow': trial.suggest_int('l3_slow', 25, 35),
+            'kama_trend_period': trial.suggest_int('kama_trend_period', 30, 36),
 
-            'ha_candle_period': trial.suggest_int('ha_candle_period', 28, 28), 
-            'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 34, 34), 
-            'displacement_strength_period': trial.suggest_int('displacement_strength_period', 25, 26), 
+            'ha_candle_period': trial.suggest_int('ha_candle_period', 25, 30), 
+            'dc_market_regime_period': trial.suggest_int('dc_market_regime_period', 30, 36), 
+            'displacement_strength_period': trial.suggest_int('displacement_strength_period', 22, 27), 
             'displacement_strength': trial.suggest_float('displacement_strength', 1.45, 1.55),
-            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 20, 20), 
+            'displacement_hull_period': trial.suggest_int('displacement_hull_period', 16, 22), 
             #    'displacement_sma_period': trial.suggest_int('displacement_sma_period', 2, 30), 
-            'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 5, 6),
+            'displacement_hull_slope_period': trial.suggest_int('displacement_hull_slope_period', 4, 7),
 
             'gap_lookback': trial.suggest_int('gap_lookback', 2, 2),
-            'gap_hull_period': trial.suggest_int('gap_hull_period', 14, 15),             # minimum 4
-            'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 6, 7),
+            'gap_hull_period': trial.suggest_int('gap_hull_period', 12, 16),             # minimum 4
+            'gap_hull_slope_period': trial.suggest_int('gap_hull_slope_period', 5, 8),
 
-            'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.003, 0.0032),
-            'tenkan_window': trial.suggest_int('tenkan_window', 4, 8), 
-            'kijun_window': trial.suggest_int('kijun_window', 55, 55), 
-            'cci_timeperiods': trial.suggest_int('cci_timeperiods', 25, 25),
+            'market_regime_threshold': trial.suggest_float('market_regime_threshold', 0.003, 0.0035),
+            'tenkan_window': trial.suggest_int('tenkan_window', 4, 9), 
+            'kijun_window': trial.suggest_int('kijun_window', 50, 60), 
+            'cci_timeperiods': trial.suggest_int('cci_timeperiods', 20, 30),
             'macd_fastperiod': trial.suggest_int('macd_fastperiod', 12, 12), 
             'macd_slowperiod': trial.suggest_int('macd_slowperiod', 35, 35), 
             'macd_signalperiod': trial.suggest_int('macd_signalperiod', 10, 10),
             'price_distribution_window_size': trial.suggest_int('price_distribution_window_size', 5, 5),   # 5,50
             'price_distribution_percentile_threshold': trial.suggest_float('price_distribution_percentile_threshold', 0.2, 0.2), # 0.2,0.5
-            'rsi_period': trial.suggest_int('rsi_period', 19, 19),
-            'rsi_slope_period': trial.suggest_int('rsi_slope_period', 15, 16),
-            'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 8, 8),
-            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 14, 15),
-            'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 25, 25),
-            'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 10, 16),
-            'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 39, 41),
+            'rsi_period': trial.suggest_int('rsi_period', 15, 21),
+            'rsi_slope_period': trial.suggest_int('rsi_slope_period', 12, 18),
+            'stoch_fastk_period': trial.suggest_int('stoch_fastk_period', 6, 10),
+            'stoch_slowk_period': trial.suggest_int('stoch_slowk_period', 12, 18),
+            'stoch_slowd_period': trial.suggest_int('stoch_slowd_period', 22, 28),
+            'ppo_fastperiod': trial.suggest_int('ppo_fastperiod', 8, 16),
+            'ppo_slowperiod': trial.suggest_int('ppo_slowperiod', 35, 45),
 
-            'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 12, 12),
+            'stochrsi_timeperiod': trial.suggest_int('stochrsi_timeperiod', 10, 14),
             'stochrsi_fastk_period': trial.suggest_int('stochrsi_fastk_period', 3, 3),
-            'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 17, 18),
+            'stochrsi_fastd_period': trial.suggest_int('stochrsi_fastd_period', 15, 20),
             'train_range_len': trial.suggest_int('train_range_len', 22, 23),
             'test_range_len': trial.suggest_int('test_range_len', 4, 4),  #3,5
             'hour_range_start': trial.suggest_int('hour_range_start', 480, 480, step=15),
             # 'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
-            'adx_timeperiod': trial.suggest_int('adx_timeperiod', 5, 5),      #5,15
-            'di_timeperiod': trial.suggest_int('di_timeperiod', 11, 11),
-            'macd_slope_period': trial.suggest_int('macd_slope_period', 9, 9),
+            'adx_timeperiod': trial.suggest_int('adx_timeperiod', 4, 6),      #5,15
+            'di_timeperiod': trial.suggest_int('di_timeperiod', 9, 12),
+            'macd_slope_period': trial.suggest_int('macd_slope_period', 7, 11),
             # 'sl': trial.suggest_float('sl', 0.003, 0.004) if not params['evals_strategy'] else 0,
-            'tp': trial.suggest_float('tp', 0.0031, 0.0034) if not params['evals_strategy'] else trial.suggest_int('tp', 50, 150),
+            'tp': trial.suggest_float('tp', 0.003, 0.0035) if not params['evals_strategy'] else trial.suggest_int('tp', 50, 150),
 
-            'atr_period': trial.suggest_int('atr_period', 7, 7),
+            'atr_period': trial.suggest_int('atr_period', 5, 8),
 
-            'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 14, 15),
+            'stochrsik_slope_period': trial.suggest_int('stochrsik_slope_period', 12, 16),
             'stochk_slope_period': trial.suggest_int('stochk_slope_period', 8, 12),
-            'willr_timeperiod': trial.suggest_int('willr_timeperiod', 27, 30),
+            'willr_timeperiod': trial.suggest_int('willr_timeperiod', 25, 30),
 
-            'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 11, 11),
+            'ha_sign_ma_period': trial.suggest_int('ha_sign_ma_period', 9, 12),
 
-            'target_tp': trial.suggest_float('target_tp', 0.0028, 0.0031),
-            'ema_period': trial.suggest_int('ema_period', 21, 21),
-            'ema_reversed_period': trial.suggest_int('ema_reversed_period', 2, 4),
+            'target_tp': trial.suggest_float('target_tp', 0.0025, 0.0035),
+            'ema_period': trial.suggest_int('ema_period', 15, 25),
+            'ema_reversed_period': trial.suggest_int('ema_reversed_period', 2, 6),
             'threshold_long': trial.suggest_float('threshold_long', 0.8, 0.8, step=0.01),
             'threshold_short': trial.suggest_float('threshold_short', 0.2, 0.2, step=0.01),
             'threshold': trial.suggest_float('threshold', 0.45, 0.45, step=0.01),
@@ -220,7 +220,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
 
             # SVR and SVC parameters
             'C': trial.suggest_float('C', 0.3, 0.4, step=0.05),
-            'epsilon': trial.suggest_float('epsilon', 0.375, 0.375, step=0.025),    # 0.3,0.5
+            'epsilon': trial.suggest_float('epsilon', 0.35, 0.4, step=0.025),    # 0.3,0.5
         }
 
         if not model_params_override:

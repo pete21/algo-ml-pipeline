@@ -12,7 +12,6 @@ stages:
     - data_ingestion.table_name
     - data_ingestion.start_date
     - data_ingestion.end_date
-    - data_ingestion.timeframe
     - data_ingestion.timeframes
     - data_ingestion.indexes
     - data_ingestion.index_barrier
@@ -32,8 +31,6 @@ stages:
     cmd: python src/data/data_preprocessing.py
     deps:
     - ${data_preprocessing.data_path}/data_ohlc_1h.csv
-    - ${data_preprocessing.data_path}/data_ohlc_15m.csv
-    - ${data_preprocessing.data_path}/data_ohlc_5m.csv
     - src/data/data_preprocessing.py
     params:
     - data_preprocessing.data_path
@@ -52,13 +49,10 @@ stages:
     cmd: python src/model/model_building.py
     deps:
     - ${model_building.data_path}/data_static_features_1h.csv
-    - ${model_building.data_path}/data_static_features_15m.csv
-    - ${model_building.data_path}/data_static_features_5m.csv
     - src/model/model_building.py
     params:
     - model_building.data_path
     - model_building.models_path
-    - model_building.timeframe
     - model_building.version
     - model_building.index_base
     - model_building.indexes_higher
@@ -83,8 +77,6 @@ stages:
   model_evaluation:
     cmd: python src/model/model_evaluation.py
     deps:
-    - ${model_building.data_path}/data_static_features_5m.csv
-    - ${model_building.data_path}/data_static_features_15m.csv
     - ${model_building.data_path}/data_static_features_1h.csv
     - src/model/model_evaluation.py
     params:
@@ -114,8 +106,6 @@ stages:
   model_registration:
     cmd: python src/model/model_registration.py
     deps:
-    - ${model_building.data_path}/data_static_features_5m.csv
-    - ${model_building.data_path}/data_static_features_15m.csv
     - ${model_building.data_path}/data_static_features_1h.csv
     - src/model/model_registration.py
     params:
