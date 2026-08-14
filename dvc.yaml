@@ -13,7 +13,6 @@ stages:
     - data_ingestion.start_date
     - data_ingestion.end_date
     - data_ingestion.timeframes
-    - data_ingestion.indexes
     - data_ingestion.index_barrier
     - data_ingestion.index_base
     - data_ingestion.indexes_higher

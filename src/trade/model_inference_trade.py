@@ -16,21 +16,21 @@ def load_data(data_path: str, params: dict, logger: logging.Logger) -> dict:
     try:
         data = {}
         
-        for i in params['model_building']['indexes_higher'] + [params['model_building']['index_base']]:
-            filename = os.path.join(data_path, params['model_inference_trade']['file_name'].format(timeframe=params['model_building']['timeframes'][i]))
+        for i in params['indexes_higher'] + [params['index_base']]:
+            filename = os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][i]))
             print("Loading data from: ", filename)
             data[i] = pd.read_csv(filename, parse_dates=True, index_col='date')
         
-        local_timezone = pytz.timezone(params['model_building']['local_timezone'])
-        data[params['model_building']['index_base']]['local_date'] = data[params['model_building']['index_base']].index.tz_localize('UTC').tz_convert(local_timezone)
+        local_timezone = pytz.timezone(params['local_timezone'])
+        data[params['index_base']]['local_date'] = data[params['index_base']].index.tz_localize('UTC').tz_convert(local_timezone)
 
 
-        data[params['model_building']['index_base']]["date_merge"] = data[params['model_building']['index_base']].index
-        for i in params['model_building']['indexes_higher']:
+        data[params['index_base']]["date_merge"] = data[params['index_base']].index
+        for i in params['indexes_higher']:
             data[i]["date_merge"] = (
                 data[i].index
-                + pd.to_timedelta(params['model_building']['timeframe_minutes'][i], "m")
-                - pd.to_timedelta(params['model_building']['timeframe_minutes'][params['model_building']['index_base']], "m")
+                + pd.to_timedelta(params['timeframe_minutes'][i], "m")
+                - pd.to_timedelta(params['timeframe_minutes'][params['index_base']], "m")
             )
 
         logger.debug('Data loaded from %s', data_path)
@@ -54,33 +54,33 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         # root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
 
         # Load parameters from the root directory
-        params = dvc.api.params_show('params.yaml')
+        params = dvc.api.params_show('params.yaml')['model_trade']
         # model_params = load_json_params(os.path.join(root_dir, 'model_params.json'), logger=logger)
 
         # Load the preprocessed data from the interim directory
         data = load_data(data_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'), params=params, logger=logger)
-        data[params['model_building']['index_base']].loc[:,"target"] = 0
+        data[params['index_base']].loc[:,"target"] = 0
 
         model_params = fetch_model_params(logger=logger)
         print(f"Model params: {model_params}")
 
         p={}
-        for i in params['model_building']['indexes_higher']:
+        for i in params['indexes_higher']:
             p[i] = model_params
             # print(data[i].tail())
 
         
         X, _, columns = getXy(data,
-        params['model_building']['index_base'],
-        params['model_building']['indexes_higher'],
+        params['index_base'],
+        params['indexes_higher'],
         model_params,
         p,
-        params['model_building']['timeframes'],
-        params['model_building']['timeframe_scalers'],
-        params['model_building']['list_X'],
+        params['timeframes'],
+        params['timeframe_scalers'],
+        params['list_X'],
         'target',
         date.today()-pd.Timedelta(30, "d"),
-        params['model_building']['lags'],
+        params['lags'],
         col_open="Open", col_high="High", col_low="Low", col_close="Close"
         )
 
@@ -91,7 +91,7 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         # print(X.columns.values)
         to_drop = ['minute_of_day', 'local_date']
         X = X.drop(columns=to_drop)
-        # X = drop_ohlc_columns(X, params['model_building']['list_X'])                  # do not drop Close as it will be used to calculate order limit price
+        # X = drop_ohlc_columns(X, params['list_X'])                  # do not drop Close as it will be used to calculate order limit price
         # print(X.columns)
 
         # X.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'X.csv'), index=True)
@@ -109,7 +109,7 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
 
         # y_pred_expected = np.matmul(predictions['predictions'], np.array([[-1],[0],[1]]))
         # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
-        # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=params['pred_avg_period'], min_periods=1).mean()
+        # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=model_params['pred_avg_period'], min_periods=1).mean()
         y_series = pd.Series(predictions['predictions'], index=X.index[-num_rows:], name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
         print(y_series)
 
@@ -121,7 +121,7 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
     print(f"End time: {datetime.now()}")
     
     result = X.tail(num_rows).join(y_series)
-    # index_base = params['model_building']['index_base']
+    # index_base = params['index_base']
     # result['Close'] = data[index_base].reindex(result.index)['Close']
     result['tp'] = model_params['tp']
     result['sl'] = model_params['sl']

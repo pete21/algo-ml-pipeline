@@ -28,7 +28,7 @@ def load_data_from_questdb(params: dict, connection: Connection, logger: logging
     """Load data from QuestDB."""
     try:
         data = {}
-        for i in params['indexes']:
+        for i in [params['index_barrier']] + params['indexes_higher']:
             # query = "SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s WHERE timestamp > '2026-03-01';"
             query = QUERY_TEMPLATE
             query_params = {
@@ -53,7 +53,7 @@ def load_data(params: dict, logger: logging.Logger) -> dict:
     """Load data from a parquet file."""
     try:
         data = {}
-        for i in params['indexes']:
+        for i in [params['index_barrier']] + params['indexes_higher']:
             file = params['file_name'].format(ticker=params['ticker'], timeframe=params['timeframes'][i])     #DAX40-10s-futures.parquet
             print(file)
             # Import the data
@@ -78,13 +78,13 @@ def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
     try:
         data[params['index_barrier']].loc[:,'Close_wavelet'] = wavelet_denoising2(data[params['index_barrier']]['Close'], wavelet='db6', lvl=8, clear_levels=3)
 
-        for i in params['indexes_higher']:
+        # for i in params['indexes_higher']:
             # data[i]["date_merge"] = (
             #     data[i].index
             #     + pd.to_timedelta(params['timeframe_minutes'][i], "m")
             #     - pd.to_timedelta(params['timeframe_minutes'][params['index_base']], "m")
             # )
-            print(data[i].head())
+            # print(data[i].head())
 
         data[params['index_base']] = (data[params['index_barrier']].groupby(data[params['index_barrier']].index.floor(f'{params['timeframes'][params['index_base']]}in'))      #ceil
                     .agg(Open=('Open','first'),
@@ -111,11 +111,8 @@ def save_data(data: dict, params: dict, logger: logging.Logger) -> None:
         
         # Create the data/raw directory if it does not exist
         os.makedirs(params['data_path_dest'], exist_ok=True)
-        
-        # Save the train and test data
-        data[params['index_base']].to_csv(f'{params['data_path_dest']}/data_ohlc_{params['timeframes'][params['index_base']]}.csv')
 
-        for i in params['indexes_higher']:
+        for i in [params['index_base']] + params['indexes_higher']:
             print(f'Timeframe: {params['timeframes'][i]}')
             data[i].to_csv(f'{params['data_path_dest']}/data_ohlc_{params['timeframes'][i]}.csv')
         

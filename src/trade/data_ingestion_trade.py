@@ -36,14 +36,14 @@ def load_data_from_questdb(params: dict, connection: Connection, logger: logging
     """Load data from QuestDB."""
     try:
         data = {}
-        for i in params['data_ingestion_trade']['indexes_higher'] + [params['data_ingestion_trade']['index_base']]:
-            query = QUERY_TEMPLATE + params['data_ingestion_trade']['timeframes'][i].lower()
+        for i in params['indexes_higher'] + [params['index_base']]:
+            query = QUERY_TEMPLATE + params['timeframes'][i].lower()
             query_params = {
-                "table" : params['data_ingestion_trade']['table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe=params['data_ingestion_trade']['timeframes'][i].upper()),
-                "table_1m" : params['data_ingestion_trade']['table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe='1M'),
-                "tickstream_table_1m" : params['data_ingestion_trade']['tickstream_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe='1M'),
-                "gaps_table_1m" : params['data_ingestion_trade']['gaps_table_name'].format(ticker=TICKERS[params['data_ingestion_trade']['ticker']], timeframe='1M'),
-                "start_date" : params['data_ingestion_trade']['start_date'],
+                "table" : params['table_name'].format(ticker=TICKERS[params['ticker']], timeframe=params['timeframes'][i].upper()),
+                "table_1m" : params['table_name'].format(ticker=TICKERS[params['ticker']], timeframe='1M'),
+                "tickstream_table_1m" : params['tickstream_table_name'].format(ticker=TICKERS[params['ticker']], timeframe='1M'),
+                "gaps_table_1m" : params['gaps_table_name'].format(ticker=TICKERS[params['ticker']], timeframe='1M'),
+                "start_date" : params['start_date'],
             }
             # print(f"Query: {query % query_params}")
             data[i] = pd.read_sql_query(query, con=connection, params=query_params, index_col='date', parse_dates=['date'])
@@ -59,14 +59,14 @@ def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
     """Preprocess the data by adding date_merge column and static features"""
     try:
 
-        local_timezone = pytz.timezone(params['data_ingestion_trade']['local_timezone'])
+        local_timezone = pytz.timezone(params['local_timezone'])
 
-        for i in params['data_ingestion_trade']['indexes_higher'] + [params['data_ingestion_trade']['index_base']]:
+        for i in params['indexes_higher'] + [params['index_base']]:
             data[i]['local_date'] = data[i].index.tz_localize('UTC').tz_convert(local_timezone)
-            data[i] = static_features(data[i], params['data_ingestion_trade']['timeframe_scalers'][i], high_col="High", low_col="Low", open_col="Open", close_col="Close")
+            data[i] = static_features(data[i], params['timeframe_scalers'][i], high_col="High", low_col="Low", open_col="Open", close_col="Close")
             
             data[i].drop(columns=['local_date'], inplace=True)
-            if i != params['data_ingestion_trade']['index_base']:
+            if i != params['index_base']:
                 data[i].drop(columns=['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'minute_of_day'], inplace=True)
 
             # print(data[i].tail())
@@ -84,9 +84,9 @@ def save_data(data: dict, params: dict, data_path: str, logger: logging.Logger) 
         # Create the data/raw directory if it does not exist
         os.makedirs(data_path, exist_ok=True)
         print("Saving data...")
-        for i in params['data_ingestion_trade']['indexes_higher'] + [params['data_ingestion_trade']['index_base']]:
-            print(f'Timeframe: {params['data_ingestion_trade']['timeframes'][i]}')
-            data[i].to_csv(f'{data_path}/questdb_static_features_{params['data_ingestion_trade']['timeframes'][i]}.csv')
+        for i in params['indexes_higher'] + [params['index_base']]:
+            print(f'Timeframe: {params['timeframes'][i]}')
+            data[i].to_csv(f'{data_path}/questdb_static_features_{params['timeframes'][i]}.csv')
         
         logger.debug('Questdb static features data saved to %s', data_path)
     except Exception as e:
@@ -96,7 +96,7 @@ def save_data(data: dict, params: dict, data_path: str, logger: logging.Logger) 
 def main(logger: logging.Logger):
     try:
         # Load parameters from the params.yaml in the root directory
-        params = dvc.api.params_show('params.yaml')
+        params = dvc.api.params_show('params.yaml')['model_trade']
 
         engine = create_engine(questdb_url, connect_args={
             'user': questdb_user, 'password': questdb_password,

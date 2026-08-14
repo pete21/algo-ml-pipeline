@@ -1,7 +1,6 @@
 import logging
 import os
 
-# from src.data_utils.utils import load_params
 import dvc.api
 import numpy as np
 import pandas as pd
@@ -56,17 +55,6 @@ def preprocess_data(data: dict, params: dict) -> dict:
     except Exception as e:
         logger.error('Failed to preprocess the data: %s', e)
         raise
-
-    # parameters = {'n_estimators': 382, 'max_depth': 7, 'learning_rate': 0.02, 'subsample': 0.95, 'gamma': 0.95, 'sma1_period': 5, 'sma2_period': 88, 'bb_periods': 18, 'bb_nbdev': 2.4625343800271473, 'ema1_period': 6, 'ema2_period': 19, 'sar_acc': 0.35347378805149954, 'sar_max': 1.102284705275549, 'midprice_window': 2, 'l1_fast': 8, 'l2_fast': 2, 'l3_fast': 8, 'l1_slow': 12, 'l2_slow': 3, 'l3_slow': 24, 'kama_trend_period': 25, 'ha_candle_period': 19, 'dc_market_regime_period': 19, 'displacement_strength_period': 35, 'displacement_strength': 1.0090179145664906, 'displacement_hull_period': 17, 'displacement_hull_slope_period': 14, 'gap_lookback': 6, 'gap_hull_period': 36, 'gap_hull_slope_period': 12, 'market_regime_threshold': 0.002987136210827556, 'tenkan_window': 7, 'kijun_window': 17, 'cci_timeperiods': 7, 'macd_fastperiod': 17, 'macd_slowperiod': 31, 'macd_signalperiod': 8, 'price_distribution_window_size': 5, 'price_distribution_percentile_threshold': 0.2, 'rsi_period': 27, 'rsi_slope_period': 6, 'stoch_fastk_period': 2, 'stoch_slowk_period': 4, 'stoch_slowd_period': 20, 'ppo_fastperiod': 3, 'ppo_slowperiod': 29, 'stochrsi_timeperiod': 7, 'stochrsi_fastk_period': 10, 'stochrsi_fastd_period': 13, 'train_range_len': 14, 'test_range_len': 5, 'hour_range_start': 10, 'hour_range_stop': 20, 'adx_timeperiod': 5, 'di_timeperiod': 19, 'macd_slope_period': 9, 'sl': 0.002294238807988796, 'tp': 0.002824953636382562, 'atr_period': 3, 'stochrsik_slope_period': 3, 'stochk_slope_period': 6, 'willr_timeperiod': 19, 'ha_sign_ma_period': 6, 'target_tp': 0.0024486199621331335, 'ema_period': 19, 'ema_reversed_period': 7, 'threshold_long': 0.8096038049250767, 'threshold_short': 0.17787209993585473}
-    # p={}
-    # p[7] = parameters
-    # p[10] = parameters
-
-    # data[params['index_base']] = calculate_features(data[params['index_base']], parameters, params['timeframe_scalers'][params['index_base']], col_close="Close", col_high="High", col_low="Low")
-    # for i in params['indexes_higher']:
-    #     data[i] = calculate_features(data[i], p[i], params['timeframe_scalers'][i], col_close="Close", col_high="High", col_low="Low")
-
-    # return data
 
 
 def save_data(data: dict, params: dict) -> None:
