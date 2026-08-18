@@ -110,13 +110,13 @@ def save_data(data: dict, params: dict, logger: logging.Logger) -> None:
     try:
         
         # Create the data/raw directory if it does not exist
-        os.makedirs(params['data_path_dest'], exist_ok=True)
+        os.makedirs(f"{params['data_path_dest']}/{params['ticker']}", exist_ok=True)
 
         for i in [params['index_base']] + params['indexes_higher']:
             print(f'Timeframe: {params['timeframes'][i]}')
-            data[i].to_csv(f'{params['data_path_dest']}/data_ohlc_{params['timeframes'][i]}.csv')
+            data[i].to_csv(os.path.join(f"{params['data_path_dest']}/{params['ticker']}", 'data_ohlc_{timeframe}.csv'.format(timeframe=params['timeframes'][i])), index=True)
         
-        logger.debug('Train and test data saved to %s', params['data_path_dest'])
+        logger.debug('Train and test data saved to %s', f"{params['data_path_dest']}/{params['ticker']}")
     except Exception as e:
         logger.error('Unexpected error occurred while saving the data: %s', e)
         raise

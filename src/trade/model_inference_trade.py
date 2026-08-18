@@ -17,7 +17,7 @@ def load_data(data_path: str, params: dict, logger: logging.Logger) -> dict:
         data = {}
         
         for i in params['indexes_higher'] + [params['index_base']]:
-            filename = os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][i]))
+            filename = os.path.join(data_path, params['file_name'].format(ticker=params['ticker'], timeframe=params['timeframes'][i]))
             print("Loading data from: ", filename)
             data[i] = pd.read_csv(filename, parse_dates=True, index_col='date')
         

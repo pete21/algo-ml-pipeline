@@ -30,7 +30,7 @@ questdb_password = os.getenv('QUESTDB_PASSWORD')
 def load_data_from_url(params: dict, logger: logging.Logger) -> dict:
     """Load data from URL"""
     try:
-        fetch_url=FETCH_URLS[params['data_ingestion_trade']['ticker']]
+        fetch_url=FETCH_URLS[params['model_trade']['ticker']]
 
         response = requests.get(fetch_url, params={'l': NUM_ROWS_TO_FETCH})
         data = response.json()["data"]
@@ -51,28 +51,28 @@ def save_data(data: pd.DataFrame, connection: Connection, params: dict, logger: 
     try:
 
         # truncate table
-        table_name = f"GAPS_{TICKERS[params['data_ingestion_trade']['ticker']]}_OHLC_1M"
+        table_name = f"GAPS_{TICKERS[params['model_trade']['ticker']]}_OHLC_1M"
         # connection.execute(text(f"TRUNCATE TABLE {table_name}"))
 
         # insert data
         # num_rows_inserted = data.to_sql(table_name, con=connection, if_exists='append', index=False, method='multi')
         # print(f"Number of rows inserted: {num_rows_inserted}")
         for row in data.iloc[::-1].iterrows():                          # .iloc[:0:-1] - skips last unfinished candle
-            if row[0].weekday()<=4:
-                print("row[0]:", row[0].strftime("%Y-%m-%dT%H:%M:%S"), row[1].open, row[1].high, row[1].low, row[1].close, row[1].vol)
-                # print("row[1].open:", row[1].open)
-                # print("row[1].high:", row[1].high)
-                # print("row[1].low:", row[1].low)
-                # print("row[1].close:", row[1].close)
-                # print("row[1].vol:", row[1].vol)
-                connection.execute(text(f"INSERT INTO {table_name} (timestamp, open, high, low, close, vol) VALUES (to_date(:timestamp, 'yyyy-MM-ddTHH:mm:ss'), :open, :high, :low, :close, :vol)"), {
-                    'timestamp': row[0].strftime("%Y-%m-%dT%H:%M:%S"),
-                    'open': row[1].open,
-                    'high': row[1].high,
-                    'low': row[1].low,
-                    'close': row[1].close,
-                    'vol': row[1].vol
-                })
+            # if row[0].weekday()<=4:
+            print("row[0]:", row[0].strftime("%Y-%m-%dT%H:%M:%S"), row[1].open, row[1].high, row[1].low, row[1].close, row[1].vol)
+            # print("row[1].open:", row[1].open)
+            # print("row[1].high:", row[1].high)
+            # print("row[1].low:", row[1].low)
+            # print("row[1].close:", row[1].close)
+            # print("row[1].vol:", row[1].vol)
+            connection.execute(text(f"INSERT INTO {table_name} (timestamp, open, high, low, close, vol) VALUES (to_date(:timestamp, 'yyyy-MM-ddTHH:mm:ss'), :open, :high, :low, :close, :vol)"), {
+                'timestamp': row[0].strftime("%Y-%m-%dT%H:%M:%S"),
+                'open': row[1].open,
+                'high': row[1].high,
+                'low': row[1].low,
+                'close': row[1].close,
+                'vol': row[1].vol
+            })
         connection.commit()
         print(f"Rows inserted.")
 

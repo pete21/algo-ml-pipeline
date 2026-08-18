@@ -29,11 +29,11 @@ def load_data(params: dict) -> dict:
     """Load the data from the data/raw directory."""
     try:
         data = {}
-        data[params['index_base']] = pd.read_csv(os.path.join(params['data_path'], params['file_name'].format(timeframe=params['timeframes'][params['index_base']])), parse_dates=True, index_col='date')
+        data[params['index_base']] = pd.read_csv(os.path.join(params['data_path'], params['ticker'], params['file_name'].format(timeframe=params['timeframes'][params['index_base']])), parse_dates=True, index_col='date')
         data[params['index_base']]["high_time"] = pd.to_datetime(data[params['index_base']]["high_time"])
         data[params['index_base']]["low_time"] = pd.to_datetime(data[params['index_base']]["low_time"])
         for i in params['indexes_higher']:
-            data[i] = pd.read_csv(os.path.join(params['data_path'], params['file_name'].format(timeframe=params['timeframes'][i])), parse_dates=True, index_col='date')
+            data[i] = pd.read_csv(os.path.join(params['data_path'], params['ticker'], params['file_name'].format(timeframe=params['timeframes'][i])), parse_dates=True, index_col='date')
             # data[i]["date_merge"] = pd.to_datetime(data[i]["date_merge"])
         return data
     except Exception as e:
@@ -60,19 +60,19 @@ def preprocess_data(data: dict, params: dict) -> dict:
 def save_data(data: dict, params: dict) -> None:
     """Save the processed dataset."""
     try:     
-        os.makedirs(params['data_path_dest'], exist_ok=True)  # Ensure the directory is created
-        logger.debug(f"Directory {params['data_path_dest']} created or already exists")
+        os.makedirs(f"{params['data_path_dest']}/{params['ticker']}", exist_ok=True)  # Ensure the directory is created
+        logger.debug(f"Directory {params['data_path_dest']}/{params['ticker']} created or already exists")
 
         for i in params['indexes_higher']:
             data[i].drop(columns=['hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'minute_of_day', 'local_date'], inplace=True)
-            data[i].to_csv(os.path.join(params['data_path_dest'], f'data_static_features_{params['timeframes'][i]}.csv'), index=True)
+            data[i].to_csv(os.path.join(params['data_path_dest'], params['ticker'], 'data_static_features_{timeframe}.csv'.format(timeframe=params['timeframes'][i])), index=True)
 
         data[params['index_base']].drop(columns=['local_date'], inplace=True)
-        data[params['index_base']].to_csv(os.path.join(params['data_path_dest'], f"data_static_features_{params['timeframes'][params['index_base']]}.csv"), index=True)
-        data[params['index_base']].isnull().sum().to_csv(os.path.join(params['data_path_dest'], 'nulls.csv'))
-        data[params['index_base']].isin([np.inf, -np.inf]).sum().to_csv(os.path.join(params['data_path_dest'], 'inf.csv'))
+        data[params['index_base']].to_csv(os.path.join(params['data_path_dest'], params['ticker'], 'data_static_features_{timeframe}.csv'.format(timeframe=params['timeframes'][params['index_base']])), index=True)
+        data[params['index_base']].isnull().sum().to_csv(os.path.join(params['data_path_dest'], params['ticker'], 'nulls.csv'))
+        data[params['index_base']].isin([np.inf, -np.inf]).sum().to_csv(os.path.join(params['data_path_dest'], params['ticker'], 'inf.csv'))
 
-        logger.debug(f"Processed data saved to {params['data_path_dest']}")
+        logger.debug(f"Processed data saved to {params['data_path_dest']}/{params['ticker']}")
     except Exception as e:
         logger.error(f"Error occurred while saving data: {e}")
         raise

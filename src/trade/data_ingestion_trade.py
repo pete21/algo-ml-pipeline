@@ -85,8 +85,8 @@ def save_data(data: dict, params: dict, data_path: str, logger: logging.Logger) 
         os.makedirs(data_path, exist_ok=True)
         print("Saving data...")
         for i in params['indexes_higher'] + [params['index_base']]:
-            print(f'Timeframe: {params['timeframes'][i]}')
-            data[i].to_csv(f'{data_path}/questdb_static_features_{params['timeframes'][i]}.csv')
+            print(f'Timeframe: {params["timeframes"][i]}')
+            data[i].to_csv(os.path.join(data_path, params['file_name'].format(ticker=params['ticker'], timeframe=params['timeframes'][i])), index=True)
         
         logger.debug('Questdb static features data saved to %s', data_path)
     except Exception as e:

@@ -23,17 +23,19 @@ stages:
     - data_ingestion.low_time_col_wavelet
 
     outs:
-    - ${data_ingestion.data_path_dest}
+    # - ${data_ingestion.data_path_dest}
+    - ${data_ingestion.data_path_dest}/${data_ingestion.ticker}
 
   
   data_preprocessing:
     cmd: python src/data/data_preprocessing.py
     deps:
-    - ${data_preprocessing.data_path}/data_ohlc_1h.csv
+    # - ${data_preprocessing.data_path}/data_ohlc_DAX40-1h.csv
     - src/data/data_preprocessing.py
     params:
     - data_preprocessing.data_path
     - data_preprocessing.data_path_dest
+    - data_preprocessing.ticker
     - data_preprocessing.index_base
     - data_preprocessing.indexes_higher
     - data_preprocessing.timeframes
@@ -41,17 +43,18 @@ stages:
     - data_preprocessing.file_name
     - data_preprocessing.local_timezone
     outs:
-    - ${data_preprocessing.data_path_dest}
+    - ${data_preprocessing.data_path_dest}/${data_preprocessing.ticker}
 
   
   model_building:
     cmd: python src/model/model_building.py
     deps:
-    - ${model_building.data_path}/data_static_features_1h.csv
+    # - ${model_building.data_path}/data_static_features_DAX40-1h.csv
     - src/model/model_building.py
     params:
     - model_building.data_path
     - model_building.models_path
+    - model_building.ticker
     - model_building.version
     - model_building.index_base
     - model_building.indexes_higher
@@ -76,7 +79,7 @@ stages:
   model_evaluation:
     cmd: python src/model/model_evaluation.py
     deps:
-    - ${model_building.data_path}/data_static_features_1h.csv
+    # - ${model_building.data_path}/data_static_features_DAX40-1h.csv
     - src/model/model_evaluation.py
     params:
     - model_evaluation.experiment_id
@@ -105,7 +108,7 @@ stages:
   model_registration:
     cmd: python src/model/model_registration.py
     deps:
-    - ${model_building.data_path}/data_static_features_1h.csv
+    # - ${model_building.data_path}/data_static_features_DAX40-1h.csv
     - src/model/model_registration.py
     params:
     - model_registration.experiment_id
@@ -118,6 +121,7 @@ stages:
     deps:
     - src/model/model_analysis.py
     params:
+    - model_analysis.experiment_id
     - model_analysis.analysis_path
     - model_analysis.target_metrics
     outs:

@@ -9,7 +9,7 @@ from feature_engine.timeseries.forecasting import LagFeatures
 from yaml import YAMLError, safe_load
 
 from src.data_utils.dynamic_features import dynamic_features
-from src.data_utils.features import calc_kernel_pca
+from src.data_utils.features import calc_kernel_pca, sarima_features, sarima_features_rolling_1_step
 
 
 def load_params(params_path: str, logger: logging.Logger) -> dict:
@@ -123,7 +123,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 
 
     if parameters['pca_ichimoku'] or parameters['pca_kama']:
-        pca_data = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']-60) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop']+120)]  # pca slice - 60 minutes before and after the hour range
+        pca_data = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']-0) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop']+60)]  # pca slice - 60 minutes before and after the hour range
         dates = np.unique(pca_data['local_date'].dt.date)
 
 # PCA
@@ -213,6 +213,20 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
             'kama_trend_fast_diff2_lag_2','kama_trend_fast_diff2_lag_2_15m','kama_trend_fast_diff2_lag_2_1h',
         ]
         X_columns = [x for x in X_columns if x not in cols]
+
+
+
+    # SARIMA
+
+        sarima_data = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']-0) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop']+60)]  # sarima slice - 60 minutes before and after the hour range
+        dates = np.unique(sarima_data['local_date'].dt.date)
+        sarima_res = sarima_features_rolling_1_step(sarima_data, dates[1:], 5, 'ha_close', (parameters['hour_range_stop']-parameters['hour_range_start']+60)//5)
+        ml_data[index_b]=ml_data[index_b].join(sarima_res)
+        X_columns.append('sarima_score')
+
+
+
+
 
     # print("X_columns: ", X_columns)
     ml_data[index_b] = ml_data[index_b].loc[ml_data[index_b].index.date>=cutoff_date]

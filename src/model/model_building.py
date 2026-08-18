@@ -42,9 +42,9 @@ def load_data(data_path: str, params: dict) -> dict:
 
     try:
         data = {}
-        print(os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][params['index_base']])))
+        print(os.path.join(data_path, params['ticker'], params['file_name'].format(timeframe=params['timeframes'][params['index_base']])))
         print("Loading data for index base: ", params['index_base'])
-        data[params['index_base']] = pd.read_csv(os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][params['index_base']])), parse_dates=True, index_col='date')
+        data[params['index_base']] = pd.read_csv(os.path.join(data_path, params['ticker'], params['file_name'].format(timeframe=params['timeframes'][params['index_base']])), parse_dates=True, index_col='date')
         # data[params['data_preprocessing']['index_base']]["high_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["high_time"])
         # data[params['data_preprocessing']['index_base']]["low_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["low_time"])
         data[params['index_base']]['local_date'] = data[params['index_base']].index.tz_localize('UTC').tz_convert(local_timezone)
@@ -52,9 +52,9 @@ def load_data(data_path: str, params: dict) -> dict:
         print(data[params['index_base']].head())
 
         for i in params['indexes_higher']:
-            print(os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][i])))
+            print(os.path.join(data_path, params['ticker'], params['file_name'].format(timeframe=params['timeframes'][i])))
             print("Loading data for index: ", i)
-            data[i] = pd.read_csv(os.path.join(data_path, params['file_name'].format(timeframe=params['timeframes'][i])), parse_dates=True, index_col='date')
+            data[i] = pd.read_csv(os.path.join(data_path, params['ticker'], params['file_name'].format(timeframe=params['timeframes'][i])), parse_dates=True, index_col='date')
             # data[i]['local_date'] = data[i].index.tz_localize('UTC').tz_convert(local_timezone)
             data[i]["date_merge"] = (
                 data[i].index

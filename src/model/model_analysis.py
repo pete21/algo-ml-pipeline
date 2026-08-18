@@ -109,7 +109,6 @@ def plot_param_correlations(
 def save_model_param_histograms(
     trial_runs_df: pd.DataFrame,
     model_param_names: list[str],
-    model_params: dict,
     positive_value_run_params: list[dict],
     output_dir: str,
 ) -> list[str]:
@@ -129,38 +128,39 @@ def save_model_param_histograms(
         if series.empty:
             continue
 
-        reference_value = model_params.get(name)
-
         fig, ax = plt.subplots(figsize=(8, 5))
+
+        # reference_value = model_params.get(name)
+
         numeric_series = pd.to_numeric(series, errors="coerce")
         if numeric_series.notna().all():
             ax.hist(numeric_series, bins="auto", edgecolor="black", alpha=0.7)
             ax.set_xlabel(name)
-            reference_numeric = pd.to_numeric(reference_value, errors="coerce")
-            if pd.notna(reference_numeric):
-                ax.axvline(
-                    reference_numeric,
-                    color="#d62728",
-                    linestyle="--",
-                    linewidth=2,
-                    label="model_params",
-                )
+        #     reference_numeric = pd.to_numeric(reference_value, errors="coerce")
+        #     if pd.notna(reference_numeric):
+        #         ax.axvline(
+        #             reference_numeric,
+        #             color="#d62728",
+        #             linestyle="--",
+        #             linewidth=2,
+        #             label="model_params",
+        #         )
         else:
             counts = series.astype(str).value_counts().sort_index()
             labels = counts.index.astype(str).tolist()
             ax.bar(labels, counts.values, edgecolor="black", alpha=0.7)
             ax.set_xlabel(name)
             plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
-            if reference_value is not None:
-                reference_label = str(reference_value)
-                if reference_label in labels:
-                    ax.axvline(
-                        labels.index(reference_label),
-                        color="#d62728",
-                        linestyle="--",
-                        linewidth=2,
-                        label="model_params",
-                    )
+        #     if reference_value is not None:
+        #         reference_label = str(reference_value)
+        #         if reference_label in labels:
+        #             ax.axvline(
+        #                 labels.index(reference_label),
+        #                 color="#d62728",
+        #                 linestyle="--",
+        #                 linewidth=2,
+        #                 label="model_params",
+        #             )
 
         for positive_value_run_param in positive_value_run_params:
             positive_value_run_param_value = positive_value_run_param.get(col)
@@ -200,18 +200,19 @@ def main():
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
 
-    experiment = find_latest_experiment(client, {"project_name": params['model_building']['project_name'], "stage": "building"})
+    experiment = find_latest_experiment(client, {"project_name": params['model_building']['project_name'], "stage": "building"}, experiment_id=params['model_analysis']['experiment_id'])
     experiment_id = experiment.experiment_id
     print(f"Experiment ID: {experiment_id}")
     
-    model_params = load_model_params_from_experiment(experiment, logger=logger, run_name='Evaluation')
-    print(f"Loaded model params: {model_params}")
+    model_params = load_model_params_from_experiment(experiment, logger=logger, run_name='Trial_0')
+    print(f"Loaded model param keys: {model_params.keys()}")
 
     positive_value_run_params = search_positive_value_runs(experiment, num_runs=NUM_BEST_TRIALS)
+    print(f"Selected {len(positive_value_run_params)} best positive value Trials")
 
 
     trial_runs_df = fetch_trial_runs_dataframe(experiment_id)
-    print(f"Fetched {len(trial_runs_df)} Trial_* runs (excluding nested runs)")
+    print(f"Fetched {len(trial_runs_df)} Trial runs (excluding nested runs)")
 
     correlations_df = compute_param_metric_correlations(
         trial_runs_df,
@@ -236,32 +237,35 @@ def main():
     histogram_paths = save_model_param_histograms(
         trial_runs_df,
         list(model_params.keys()),
-        model_params,
         positive_value_run_params,
         histograms_dir,
     )
     print(f"Saved {len(histogram_paths)} parameter histograms to {histograms_dir}")
 
 
-    runs = mlflow.search_runs(
-        experiment_ids=[experiment.experiment_id],
-        filter_string="run_name = 'Evaluation'",
-    )
-    if runs.empty:
-        raise ValueError(
-            f"No run named 'Evaluation' found in experiment "
-            f"'{experiment.name}' (id={experiment.experiment_id})"
-        )
-    run_id = runs.iloc[0]["run_id"]                                # Store output in the latest Evaluation run
+    # runs = mlflow.search_runs(
+    #     experiment_ids=[experiment.experiment_id],
+    #     filter_string="run_name = 'Evaluation'",
+    # )
+    # if runs.empty:
+    #     raise ValueError(
+    #         f"No run named 'Evaluation' found in experiment "
+    #         f"'{experiment.name}' (id={experiment.experiment_id})"
+    #     )
+    # run_id = runs.iloc[0]["run_id"]                                # Store output in the latest Evaluation run
 
-    with mlflow.start_run(run_id=run_id) as run:
+    # with mlflow.start_run(run_id=run_id) as run:
+
+    mlflow.set_experiment(experiment_id=experiment_id)
+    with mlflow.start_run(run_name='Analysis') as run:
+        run_id = run.info.run_id
         mlflow.log_artifact(local_path=correlations_path, artifact_path='correlations')
         for metric in target_metrics:
             plot_path = os.path.join(analysis_dir, f"param_correlations_{metric}.png")
             mlflow.log_artifact(local_path=plot_path, artifact_path='correlations')
-        print(f"Logged correlations to MLflow run id {run_id} artifact path 'correlations'")
+        print(f"Logged correlations to MLflow run {run_id} artifact path 'correlations'")
         mlflow.log_artifacts(local_dir=histograms_dir, artifact_path='histograms')
-        print(f"Logged {len(histogram_paths)} parameter histograms to MLflow run id {run_id} artifact path 'histograms'")
+        print(f"Logged {len(histogram_paths)} parameter histograms to MLflow run {run_id} artifact path 'histograms'")
 
 
 if __name__ == '__main__':

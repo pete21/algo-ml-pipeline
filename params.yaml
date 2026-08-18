@@ -1,15 +1,15 @@
 data_ingestion:
   data_path: 'data/src'
   data_path_dest: 'data/raw'
-  ticker: 'DAX40'
+  ticker: 'DAX40' # 'SP500' 'NQ100'
   data_source: 'questdb'
   table_name: 'DUKASCOPY_{ticker}_OHLC_{timeframe}'
   start_date: '2021-07-01'
-  end_date: '2026-08-07'
+  end_date: '2026-08-14'
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   index_barrier: 1
   index_base: 5
-  indexes_higher: [7,9,10]
+  indexes_higher: [6,7,8,9,10]
   file_name: '{ticker}-{timeframe}-futures.parquet'
   high_time_col: 'High'
   low_time_col: 'Low'
@@ -19,18 +19,20 @@ data_ingestion:
 data_preprocessing:
   data_path: 'data/raw'
   data_path_dest: 'data/interim'
+  ticker: 'DAX40' # 'SP500' 'NQ100'
   index_base: 5
-  indexes_higher: [7,9,10]
+  indexes_higher: [6,7,8,9,10]
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
   file_name: 'data_ohlc_{timeframe}.csv'
-  local_timezone: 'Europe/Berlin'
+  local_timezone: "America/New_York" # 'Europe/Berlin'
 
 model_building:
   data_path: 'data/interim'
   models_path: 'data/models'
+  ticker: 'DAX40' # 'SP500' 'NQ100'
   index_base: 5
-  indexes_higher: [7,9]
+  indexes_higher: [7,10]
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
   timeframe_minutes: [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 60, 120, 240, 1440]
@@ -154,18 +156,19 @@ model_building:
   version: 2
   model_type: 'svr_regression'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 400
+  n_trials: 1000
   num_splits: 25
-  project_name: 'svr-dax-pipeline'
+  project_name: 'svr-pipeline'
   evals_strategy: False
-  local_timezone: 'Europe/Berlin'
+  local_timezone: 'Europe/Berlin' # "America/New_York" 'Europe/Berlin'
 
 model_evaluation:
-  experiment_id: 111
-  num_best_trials: 3
-  num_evaluations_per_trial: 5
+  experiment_id: 117
+  num_best_trials: 5
+  num_evaluations_per_trial: 10
 
 model_analysis:
+  experiment_id: 117
   target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor', 'total_trades']
   analysis_path: 'data/models/analysis'
 
@@ -187,7 +190,7 @@ model_trade:
   timeframe_minutes: [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 60, 120, 240, 1440]
   index_base: 5
   indexes_higher: [7,10]
-  file_name: 'questdb_static_features_{timeframe}.csv'
+  file_name: '{ticker}/questdb_static_features_{timeframe}.csv'
   list_X: [
     'ha_open',
     'ha_high',

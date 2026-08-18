@@ -14,6 +14,7 @@ from scipy.signal import hilbert
 #from functools import lru_cache
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import StandardScaler
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 from src.data_utils.features_engineering import math, trend
 from src.data_utils.features_engineering.volatility.close_to_close import (
@@ -876,7 +877,7 @@ def ichimoku(df, col_high="High", col_low="Low", tenkan_window=9, kijun_window=2
 
 ## PCA
 
-def calc_kernel_pca(df, day_range, window, col_features, col_pca_comp):
+def calc_kernel_pca(df, day_range, window: int, col_features: list, col_pca_comp: list):
     scaler = StandardScaler()
     # Call the PCA method from scikit learn
     num_components = len(col_pca_comp)
@@ -917,6 +918,130 @@ def calc_kernel_pca(df, day_range, window, col_features, col_pca_comp):
     
     current_slice_scaled_pca_scores_df_sum.set_index(['date'], inplace=True)
     return current_slice_scaled_pca_scores_df_sum
+
+
+def sarima_features(df, day_range, window: int, col_feature: str, sarima_period: int):
+    scaler = StandardScaler()
+
+    current_slice_scaled_sarima_df_sum = pd.DataFrame()
+    for current_date_ind in range(window, len(day_range)):
+        
+        current_date = day_range[current_date_ind]
+        current_date_window_start = day_range[current_date_ind-window]
+        # Get data for current date
+        current_slice = df[df['local_date'].dt.date == current_date][[col_feature]]
+        if current_slice.shape[0]==0:
+            print(f"Current slice is empty for {current_date}")
+            continue
+        # Get data for previous 'window' days
+        mask = (df['local_date'].dt.date < current_date) & (df['local_date'].dt.date >= current_date_window_start)
+        historical_slice = df[mask][[col_feature]]
+        # print(current_slice)
+        # print(historical_slice)
+    
+        # Standardize the features using the training set
+        historical_slice_scaled = scaler.fit_transform(historical_slice)  # Fit on training data
+        # current_slice_scaled = scaler.transform(current_slice)
+    
+        model = SARIMAX(historical_slice_scaled,
+                        order=(2, 0, 1),
+                        seasonal_order=(0, 1, 1, sarima_period),
+                        enforce_stationarity=False,
+                        enforce_invertibility=False
+                        )
+        fitted_model = model.fit(disp=False)
+
+        predictions_scaled = fitted_model.forecast(steps=1)
+
+        # To calculate true errors, transform data back to the original price/index scale
+        predictions_original = scaler.inverse_transform(predictions_scaled)
+        predictions_series = pd.Series(predictions_original, index=current_slice.index)
+
+        # The raw residuals (errors) for each point in time
+        residuals = current_slice - predictions_series
+
+    
+        current_slice_scaled_sarima_scores_df = pd.DataFrame(predictions_original, columns = ['sarima_score'], index=current_slice.index)
+        current_slice_scaled_sarima_residuals_df = pd.DataFrame(residuals, columns = ['sarima_residuals'], index=current_slice.index)
+        current_slice_scaled_sarima_residuals_df['date'] = current_slice.index
+        current_slice_scaled_sarima_df_sum = pd.concat([current_slice_scaled_sarima_df_sum, current_slice_scaled_sarima_residuals_df, current_slice_scaled_sarima_scores_df])
+        # print(current_slice_scaled_pca_scores_df_sum)
+
+
+def sarima_features_rolling_1_step(df, day_range, window: int, col_feature: str, sarima_period: int):
+    scaler = StandardScaler()
+
+    current_slice_scaled_sarima_df_sum = pd.DataFrame()
+    for current_date_ind in range(window, len(day_range)):
+        
+        current_date = day_range[current_date_ind]
+        current_date_window_start = day_range[current_date_ind-window]
+        # Get data for current date
+        current_slice = df[df['local_date'].dt.date == current_date][[col_feature]]
+        if current_slice.shape[0]==0:
+            print(f"Current slice is empty for {current_date}")
+            continue
+        # Get data for previous 'window' days
+        mask = (df['local_date'].dt.date < current_date) & (df['local_date'].dt.date >= current_date_window_start)
+        historical_slice = df[mask][[col_feature]]
+        # print(current_slice)
+        # print(historical_slice)
+    
+        # Standardize the features using the training set
+        historical_slice_scaled = scaler.fit_transform(historical_slice)  # Fit on training data
+        current_slice_scaled = scaler.transform(current_slice)
+    
+        model = SARIMAX(historical_slice_scaled,
+                        order=(2, 0, 1),
+                        seasonal_order=(0, 1, 1, sarima_period),
+                        enforce_stationarity=False,
+                        enforce_invertibility=False
+                        )
+        fitted_model = model.fit(disp=False)
+
+        # ==========================================================
+        # 3. CALCULATE ROLLING PREDICTIONS ON TEST DATA
+        # ==========================================================
+        predictions_scaled = []
+        history = historical_slice_scaled.copy()
+
+        print("\nGenerating 1-step-ahead rolling predictions...")
+        for actual_value in current_slice_scaled:
+            # 1. Fit/Extend the existing model structure with the accumulated history
+            # 'extend' preserves the trained parameters but appends the new data point
+            current_model = SARIMAX(
+                history,
+                order=(2, 0, 1),
+                seasonal_order=(0, 1, 1, sarima_period),
+                enforce_stationarity=False,
+                enforce_invertibility=False
+            )
+            # Use the parameters found during the initial training phase
+            res = current_model.filter(fitted_model.params)
+            
+            # 2. Forecast exactly 1 step into the future
+            next_pred = res.forecast(steps=1)
+            predictions_scaled.append(next_pred)
+            
+            # 3. Update the history array with the true observed value for the next loop
+            # history = pd.concat([history, pd.Series([actual_value], index=[current_slice_scaled.index[len(predictions_scaled)-1]])])
+            history = np.concatenate([history, [actual_value]])
+
+
+        # To calculate true errors, transform data back to the original price/index scale
+        predictions_original = scaler.inverse_transform(predictions_scaled)
+        predictions_series = pd.Series(predictions_original, index=current_slice.index)
+
+        # The raw residuals (errors) for each point in time
+        residuals = current_slice - predictions_series
+
+    
+        current_slice_scaled_sarima_scores_df = pd.DataFrame(predictions_original, columns = ['sarima_score'], index=current_slice.index)
+        current_slice_scaled_sarima_residuals_df = pd.DataFrame(residuals, columns = ['sarima_residuals'], index=current_slice.index)
+        current_slice_scaled_sarima_residuals_df['date'] = current_slice.index
+        current_slice_scaled_sarima_df_sum = pd.concat([current_slice_scaled_sarima_df_sum, current_slice_scaled_sarima_residuals_df, current_slice_scaled_sarima_scores_df])
+        # print(current_slice_scaled_pca_scores_df_sum)
+
 
 
 def market_regime_features(df, col_close="Close", col_high="High", col_low="Low",l1_fast=40,l2_fast=2,l3_fast=30,l1_slow=100,l2_slow=2,l3_slow=30, displacement_strength=3, market_regime_threshold=0.0015,

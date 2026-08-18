@@ -126,9 +126,9 @@ def search_positive_value_runs(experiment: Experiment, num_runs: int = 10) -> li
     """Search all positive value runs and return the run params of them."""
     runs = mlflow.search_runs(
         experiment_ids=[experiment.experiment_id],
-        filter_string="metrics.optimisation_score > 0",
+        filter_string="metrics.optimisation_score > 0 AND run_name LIKE 'Trial_%'",
     )
-    print(f"Found {len(runs)} positive value runs")
+    print(f"Found {len(runs)} positive value Trials")
     if runs.empty:
         return []
 
