@@ -41,8 +41,10 @@ def create_mlflow_experiment(experiment_name: str, mlflow_tracking_uri: str, tag
     return experiment_id
 
 
-def find_latest_experiment(client: MlflowClient, tags: dict):
+def find_latest_experiment(client: MlflowClient, tags: dict, experiment_id: int | None = None):
     """Find the most recent MLflow experiment tagged for the building stage."""
+    if experiment_id:
+        return client.get_experiment(experiment_id)
     filter_string = " AND ".join(
         f"tags.{key} = '{value}'" for key, value in tags.items()
     )

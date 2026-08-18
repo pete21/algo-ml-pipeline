@@ -54,11 +54,11 @@ def main():
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
 
-    experiment = find_latest_experiment(client, {"project_name": params['project_name'], "stage": "building"})
+    experiment = find_latest_experiment(client, {"project_name": params['project_name'], "stage": "building"}, experiment_id=109)
     experiment_id = experiment.experiment_id
     print(f"Experiment ID: {experiment_id}")
 
-    model_params = load_model_params_from_experiment(experiment, logger=logger)
+    model_params = load_model_params_from_experiment(experiment, logger=logger, run_name='Trial_664')
     print(f"Loaded model params: {model_params}")
 
     optimisation_score = objective(None, data, params, cutoff_date, unique_weekdates, experiment_id, model_params_override=model_params)
