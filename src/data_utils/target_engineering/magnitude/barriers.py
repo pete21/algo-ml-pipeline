@@ -30,7 +30,7 @@ def _fast_barrier_buy(
         var_low = (low_price - open_price) / open_price
 
         if (tp <= var_high) and (var_low <= sl):
-            if high_time_arr[i + j] <= low_time_arr[i + j]:
+            if high_time_arr[i + j] < low_time_arr[i + j]:
                 delta = high_time_arr[i + j] - time_arr[i]
                 return delta / 3600
             else:
@@ -74,7 +74,7 @@ def _fast_barrier_sell(
         var_low = (low_price - open_price) / open_price
 
         if (tp <= -var_low) and (-var_high <= sl):
-            if low_time_arr[i + j] <= high_time_arr[i + j]:
+            if low_time_arr[i + j] < high_time_arr[i + j]:
                 delta = low_time_arr[i + j] - time_arr[i]
                 return delta / 3600
             else:

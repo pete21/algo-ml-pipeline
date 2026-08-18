@@ -1,0 +1,25 @@
+services:
+  model_serving:
+    hostname: model_serving
+    container_name: model_serving
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: registry.tradefiapp.com:5443/algo-ml-model-serving:1.0
+    ports:
+      - "${PORT:-8100}:8100"
+    env_file:
+      - .env
+    environment:
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://host.docker.internal:5000/}
+      # MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://host.docker.internal:9900/}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - marketbroker_net
+
+networks:
+    marketbroker_net:
+        name: marketbroker_net-network
+        external: true

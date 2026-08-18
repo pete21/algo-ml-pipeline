@@ -3,14 +3,16 @@ stages:
     cmd: python src/data/data_ingestion.py
     deps:
     - src/data/data_ingestion.py
-    - ${data_ingestion.data_path}/${data_ingestion.ticker}-${data_ingestion.timeframe}-futures.parquet
+    # - ${data_ingestion.data_path}/${data_ingestion.ticker}-${data_ingestion.timeframe}-futures.parquet
     params:
     - data_ingestion.data_path
+    - data_ingestion.data_path_dest
     - data_ingestion.ticker
+    - data_ingestion.data_source
+    - data_ingestion.table_name
+    - data_ingestion.start_date
+    - data_ingestion.end_date
     - data_ingestion.timeframes
-    - data_ingestion.timeframe_minutes
-    - data_ingestion.timeframe_scalers
-    - data_ingestion.indexes
     - data_ingestion.index_barrier
     - data_ingestion.index_base
     - data_ingestion.indexes_higher
@@ -21,39 +23,38 @@ stages:
     - data_ingestion.low_time_col_wavelet
 
     outs:
-    - data/raw
+    # - ${data_ingestion.data_path_dest}
+    - ${data_ingestion.data_path_dest}/${data_ingestion.ticker}
 
   
   data_preprocessing:
     cmd: python src/data/data_preprocessing.py
     deps:
-    - ${data_preprocessing.data_path}/data_ohlc_features_1h.csv
-    - ${data_preprocessing.data_path}/data_ohlc_features_15m.csv
-    - ${data_preprocessing.data_path}/data_ohlc_features_5m.csv
+    # - ${data_preprocessing.data_path}/data_ohlc_DAX40-1h.csv
     - src/data/data_preprocessing.py
     params:
     - data_preprocessing.data_path
+    - data_preprocessing.data_path_dest
+    - data_preprocessing.ticker
     - data_preprocessing.index_base
     - data_preprocessing.indexes_higher
     - data_preprocessing.timeframes
     - data_preprocessing.timeframe_scalers
     - data_preprocessing.file_name
+    - data_preprocessing.local_timezone
     outs:
-    - data/interim
-
+    - ${data_preprocessing.data_path_dest}/${data_preprocessing.ticker}
 
   
   model_building:
     cmd: python src/model/model_building.py
     deps:
-    - ${model_building.data_path}/data_static_features_1h.csv
-    - ${model_building.data_path}/data_static_features_15m.csv
-    - ${model_building.data_path}/data_static_features_5m.csv
+    # - ${model_building.data_path}/data_static_features_DAX40-1h.csv
     - src/model/model_building.py
     params:
     - model_building.data_path
     - model_building.models_path
-    - model_building.timeframe
+    - model_building.ticker
     - model_building.version
     - model_building.index_base
     - model_building.indexes_higher
@@ -62,26 +63,68 @@ stages:
     - model_building.file_name
     - model_building.list_X
     - model_building.col_y
+    - model_building.n_trials
+    - model_building.num_splits
+    - model_building.project_name
+    - model_building.model_type
+    # - model_building.model_params_name
+    - model_building.evals_strategy
+    - model_building.local_timezone
     outs:
-    - ${model_building.models_path}/model_params_${model_building.timeframe}_v${model_building.version}.json
+    # - ${model_building.models_path}/model_params_${model_building.timeframe}_v${model_building.version}.json
+    - ${model_building.models_path}/optuna_trials.csv
+    # - ${model_building.models_path}/model_params_5m_v1.json
+
+
+  model_evaluation:
+    cmd: python src/model/model_evaluation.py
+    deps:
+    # - ${model_building.data_path}/data_static_features_DAX40-1h.csv
+    - src/model/model_evaluation.py
+    params:
+    - model_evaluation.experiment_id
+    - model_evaluation.run_name
+    - model_evaluation.num_best_trials
+    - model_evaluation.num_evaluations_per_trial
+    # - model_evaluation.models_path
+    # - model_evaluation.timeframe
+    # - model_evaluation.index_base
+    # - model_evaluation.indexes_higher
+    # - model_evaluation.timeframes
+    # - model_evaluation.timeframe_scalers
+    # - model_evaluation.file_name
+    # - model_evaluation.list_X
+    # - model_evaluation.col_y
+    # - model_evaluation.lags
+    # # - model_evaluation.version
+    # - model_evaluation.num_splits
+    # - model_evaluation.evals_strategy
+    # - model_evaluation.model_params_name
+    # outs:
+    # - data/models
+    # - data/models/evaluation_results.csv
 
 
   
-  # model_evaluation:
-  #   cmd: python src/model/model_evaluation.py
-  #   deps:
-  #   - lgbm_model.pkl
-  #   - tfidf_vectorizer.pkl
-  #   - data/interim/train_processed.csv
-  #   - data/interim/test_processed.csv
-  #   - src/model/model_evaluation.py
-  #   outs:
-  #   - experiment_info.json
+  model_registration:
+    cmd: python src/model/model_registration.py
+    deps:
+    # - ${model_building.data_path}/data_static_features_DAX40-1h.csv
+    - src/model/model_registration.py
+    params:
+    - model_registration.experiment_id
+    - model_registration.run_name
+    - model_registration.model_tag
 
 
-  
-  # model_registration:
-  #   cmd: python src/model/register_model.py
-  #   deps:
-  #   - experiment_info.json
-  #   - src/model/register_model.py
+  model_analysis:
+    cmd: python src/model/model_analysis.py
+    deps:
+    - src/model/model_analysis.py
+    params:
+    - model_analysis.experiment_id
+    - model_analysis.analysis_path
+    - model_analysis.target_metrics
+    outs:
+    - ${model_analysis.analysis_path}/param_metric_correlations.csv
+    - ${model_analysis.analysis_path}/param_correlations_optimisation_score.png

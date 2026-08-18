@@ -1,0 +1,25 @@
+FROM python:3.12.13-slim-bookworm
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+    #  \
+    # PIP_NO_CACHE_DIR=1
+
+COPY setup.py .
+COPY . ./src/serving/
+
+#RUN --mount=type=cache,target=/root/.cache/pip pip install --upgrade pip && \
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r src/serving/requirements.txt
+    # pip install -e .
+RUN pip cache purge
+
+COPY .env ./src/serving/.env
+
+EXPOSE ${PORT:-8100}
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${PORT:-8100}/health')" || exit 1
+
+CMD ["python", "-m", "src.serving.model_run"]

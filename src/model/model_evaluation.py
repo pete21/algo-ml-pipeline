@@ -1,30 +1,25 @@
-import numpy as np
-import pandas as pd
-import pickle
+# import matplotlib.pyplot as plt
+# import seaborn as sns
+
 import logging
-import mlflow
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.feature_extraction.text import TfidfVectorizer
 import os
-import matplotlib.pyplot as plt
-import seaborn as sns
-import json
-from datetime import date
-from mlflow.models import infer_signature
+
+import dvc.api
+import mlflow
+import pandas as pd
+from dotenv import load_dotenv
 from mlflow.tracking import MlflowClient
 
-from src.data_utils.utils import load_params, get_dates
+from src.backtesting.optimization import objective
+from src.data_utils.utils import get_dates
+from src.model.mlflow_utils import (
+    find_latest_experiment,
+    load_model_params_from_experiment,
+    search_positive_value_runs,
+)
 from src.model.model_building import load_data
 
-os.environ["AWS_ACCESS_KEY_ID"] = "minio"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "minio123"
-os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://192.168.10.250:9900"
-
-MLFLOW_TRACKING_URI = "http://localhost:5000/"
-BUILDING_EXPERIMENT_TAGS = {
-    "project_name": "xgb-dax-pipeline",
-    "stage": "building",
-}
+load_dotenv()
 
 # logging configuration
 logger = logging.getLogger('model_evaluation')
@@ -33,7 +28,7 @@ logger.setLevel('DEBUG')
 console_handler = logging.StreamHandler()
 console_handler.setLevel('DEBUG')
 
-file_handler = logging.FileHandler('model_evaluation_errors.log')
+file_handler = logging.FileHandler('model_evaluation.log')
 file_handler.setLevel('ERROR')
 
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -44,172 +39,47 @@ logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
 
-
-def load_model(model_path: str):
-    """Load the trained model."""
-    try:
-        with open(model_path, 'rb') as file:
-            model = pickle.load(file)
-        logger.debug('Model loaded from %s', model_path)
-        return model
-    except Exception as e:
-        logger.error('Error loading model from %s: %s', model_path, e)
-        raise
-
-
-def load_vectorizer(vectorizer_path: str) -> TfidfVectorizer:
-    """Load the saved TF-IDF vectorizer."""
-    try:
-        with open(vectorizer_path, 'rb') as file:
-            vectorizer = pickle.load(file)
-        logger.debug('TF-IDF vectorizer loaded from %s', vectorizer_path)
-        return vectorizer
-    except Exception as e:
-        logger.error('Error loading vectorizer from %s: %s', vectorizer_path, e)
-        raise
-
-
-def find_latest_building_experiment(client: MlflowClient):
-    """Find the most recent MLflow experiment tagged for the building stage."""
-    filter_string = " AND ".join(
-        f"tags.{key} = '{value}'" for key, value in BUILDING_EXPERIMENT_TAGS.items()
-    )
-    experiments = client.search_experiments(filter_string=filter_string)
-    if not experiments:
-        raise ValueError(
-            f"No MLflow experiments found with tags: {BUILDING_EXPERIMENT_TAGS}"
-        )
-    return max(experiments, key=lambda exp: exp.last_update_time or exp.creation_time)
-
-
-def load_model_params_from_building_experiment(client: MlflowClient) -> dict:
-    """Load model_params artifact from the best run of the latest building experiment."""
-    experiment = find_latest_building_experiment(client)
-    best_run_name = experiment.tags.get("best_run_name")
-    if not best_run_name:
-        raise ValueError(
-            f"Experiment '{experiment.name}' (id={experiment.experiment_id}) "
-            "is missing the 'best_run_name' tag"
-        )
-
-    print(
-        f"Using experiment '{experiment.name}' (id={experiment.experiment_id}), "
-        f"best_run_name='{best_run_name}'"
-    )
-
-    runs = mlflow.search_runs(
-        experiment_ids=[experiment.experiment_id],
-        filter_string=f"run_name = '{best_run_name}'",
-    )
-    if runs.empty:
-        raise ValueError(
-            f"No run named '{best_run_name}' found in experiment "
-            f"'{experiment.name}' (id={experiment.experiment_id})"
-        )
-
-    run_id = runs.iloc[0]["run_id"]
-    artifact_dir = mlflow.artifacts.download_artifacts(
-        run_id=run_id,
-        artifact_path="model_params",
-    )
-
-    json_files = [
-        os.path.join(artifact_dir, filename)
-        for filename in os.listdir(artifact_dir)
-        if filename.endswith(".json")
-    ]
-    if not json_files:
-        raise ValueError(
-            f"No JSON model_params artifact found for run '{best_run_name}' "
-            f"(run_id={run_id})"
-        )
-
-    with open(json_files[0], "r") as file:
-        model_params = json.load(file)
-
-    logger.debug(
-        "Model params loaded from MLflow run '%s' (run_id=%s)",
-        best_run_name,
-        run_id,
-    )
-    return model_params
-
-
-def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray):
-    """Evaluate the model and log classification metrics and confusion matrix."""
-    try:
-        # Predict and calculate classification metrics
-        y_pred = model.predict(X_test)
-        report = classification_report(y_test, y_pred, output_dict=True)
-        cm = confusion_matrix(y_test, y_pred)
-        
-        logger.debug('Model evaluation completed')
-
-        return report, cm
-    except Exception as e:
-        logger.error('Error during model evaluation: %s', e)
-        raise
-
-
-def log_confusion_matrix(cm, dataset_name):
-    """Log confusion matrix as an artifact."""
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-    plt.title(f'Confusion Matrix for {dataset_name}')
-    plt.xlabel('Predicted')
-    plt.ylabel('Actual')
-
-    # Save confusion matrix plot as a file and log it to MLflow
-    cm_file_path = f'confusion_matrix_{dataset_name}.png'
-    plt.savefig(cm_file_path)
-    mlflow.log_artifact(cm_file_path)
-    plt.close()
-
-def save_model_info(run_id: str, model_path: str, file_path: str) -> None:
-    """Save the model run ID and path to a JSON file."""
-    try:
-        # Create a dictionary with the info you want to save
-        model_info = {
-            'run_id': run_id,
-            'model_path': model_path
-        }
-        # Save the dictionary as a JSON file
-        with open(file_path, 'w') as file:
-            json.dump(model_info, file, indent=4)
-        logger.debug('Model info saved to %s', file_path)
-    except Exception as e:
-        logger.error('Error occurred while saving the model info: %s', e)
-        raise
-
-
 def main():
 
-    # Get root directory and resolve the path for params.yaml
-    root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
-
     # Load parameters from the root directory
-    params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
-    # model_params = load_json_params(os.path.join(root_dir, 'model_params.json'), logger=logger)
+    params = dvc.api.params_show('params.yaml')
+    
+    model_evaluation_params = params['model_evaluation']
+    experiment_id = model_evaluation_params['experiment_id']
+    num_best_trials = model_evaluation_params['num_best_trials']
+    num_evaluations_per_trial = model_evaluation_params['num_evaluations_per_trial']
+
+    model_building_params = params['model_building']
 
     # Load the preprocessed data from the interim directory
-    data = load_data(data_path=params['model_building']['data_path'], params=params)
+    data = load_data(data_path=model_building_params['data_path'], params=model_building_params)
     
-    cutoff_date = date(2024,6,1)
+    cutoff_date = data[model_building_params['index_base']].index.date.min()+pd.Timedelta(30, "D")
     for d in data:
-        data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(14, "D")]
-    unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
-    print(mondays_indexes)
-    splits_all = []
+        data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
+    _, unique_weekdates = get_dates(data, model_building_params['index_base'])
 
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     client = MlflowClient()
-    model_params = load_model_params_from_building_experiment(client)
-    print(f"Loaded model params: {model_params}")
+
+    experiment = find_latest_experiment(client, {"project_name": model_building_params['project_name'], "stage": "building"}, experiment_id=experiment_id)
+    experiment_id = experiment.experiment_id
+    print(f"Experiment: {experiment}")
 
 
+    positive_value_run_params = search_positive_value_runs(experiment, num_runs=num_best_trials, run_name=model_evaluation_params['run_name'])
 
+    for positive_value_run_param in positive_value_run_params:
+        run_name = positive_value_run_param['tags.mlflow.runName']
+        print(f"Run name: {run_name}")
+        model_params = load_model_params_from_experiment(experiment, logger=logger, run_name=run_name)
+        print(f"Loaded model params: {model_params}")
 
-
+        model_building_params['run_name'] = run_name
+        for i in range(num_evaluations_per_trial):
+            print(f"Evaluation {i+1} of {num_evaluations_per_trial} for run {run_name}")
+            optimisation_score = objective(None, data, model_building_params, cutoff_date, unique_weekdates, experiment_id, model_params_override=model_params)
+            print(f"Optimisation score: {optimisation_score}")
 
 
 if __name__ == '__main__':
