@@ -76,7 +76,7 @@ def load_data(params: dict, logger: logging.Logger) -> dict:
 def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
     """Preprocess the data by adding Close_wavelet column, date_merge column is not added"""
     try:
-        data[params['index_barrier']].loc[:,'Close_wavelet'] = wavelet_denoising2(data[params['index_barrier']]['Close'], wavelet='db6', lvl=8, clear_levels=3)
+        data[params['index_barrier']].loc[:,'Close_wavelet'] = wavelet_denoising2(data[params['index_barrier']]['Close'], wavelet='db6', lvl=7, clear_levels=3)
 
         # for i in params['indexes_higher']:
             # data[i]["date_merge"] = (

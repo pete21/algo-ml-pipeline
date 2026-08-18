@@ -71,7 +71,7 @@ def main():
     print(f"Experiment: {experiment}")
 
 
-    positive_value_run_params = search_positive_value_runs(experiment, num_runs=num_best_trials)
+    positive_value_run_params = search_positive_value_runs(experiment, num_runs=num_best_trials, run_name=model_evaluation_params['run_name'])
 
     for positive_value_run_param in positive_value_run_params:
         run_name = positive_value_run_param['tags.mlflow.runName']

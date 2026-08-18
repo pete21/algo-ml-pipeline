@@ -284,7 +284,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             X_train = X.loc[mask]
             y_train = y.loc[mask]
 
-            X_train, y_train = remove_outliers(X_train, y_train, params, threshold=1.01)
+            X_train, y_train = remove_outliers(X_train, y_train, params, threshold=1.005)
             X_train = drop_ohlc_columns(X_train, list_X)
 
             X_test = X.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]

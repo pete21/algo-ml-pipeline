@@ -217,14 +217,11 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 
 
     # SARIMA
-
-        sarima_data = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']-0) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop']+60)]  # sarima slice - 60 minutes before and after the hour range
-        dates = np.unique(sarima_data['local_date'].dt.date)
-        sarima_res = sarima_features_rolling_1_step(sarima_data, dates[1:], 5, 'ha_close', (parameters['hour_range_stop']-parameters['hour_range_start']+60)//5)
-        ml_data[index_b]=ml_data[index_b].join(sarima_res)
-        X_columns.append('sarima_score')
-
-
+    # sarima_data = ml_data[index_b].loc[(ml_data[index_b]['minute_of_day']>=parameters['hour_range_start']-0) & (ml_data[index_b]['minute_of_day']<parameters['hour_range_stop']+60)]  # sarima slice - 60 minutes before and after the hour range
+    # dates = np.unique(sarima_data['local_date'].dt.date)
+    # sarima_res = sarima_features_rolling_1_step(sarima_data, dates[1:], 5, 'ha_close', (parameters['hour_range_stop']-parameters['hour_range_start']+60)//5)
+    # ml_data[index_b]=ml_data[index_b].join(sarima_res)
+    # X_columns.append('sarima_score')
 
 
 

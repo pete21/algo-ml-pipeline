@@ -163,7 +163,8 @@ model_building:
   local_timezone: 'Europe/Berlin' # "America/New_York" 'Europe/Berlin'
 
 model_evaluation:
-  experiment_id: 117
+  experiment_id: 109
+  run_name: 'Trial_664'
   num_best_trials: 5
   num_evaluations_per_trial: 10
 

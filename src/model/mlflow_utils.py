@@ -122,11 +122,11 @@ def load_model_params_from_experiment(experiment: Experiment, logger: logging.Lo
 
 
 # Search positive value runs and return run params
-def search_positive_value_runs(experiment: Experiment, num_runs: int = 10) -> list[dict]:
+def search_positive_value_runs(experiment: Experiment, num_runs: int = 10, run_name: str | None = None) -> list[dict]:
     """Search all positive value runs and return the run params of them."""
     runs = mlflow.search_runs(
         experiment_ids=[experiment.experiment_id],
-        filter_string="metrics.optimisation_score > 0 AND run_name LIKE 'Trial_%'",
+        filter_string=f"metrics.optimisation_score > 0 AND run_name = '{run_name}'" if run_name else "metrics.optimisation_score > 0 AND run_name LIKE 'Trial_%'",
     )
     print(f"Found {len(runs)} positive value Trials")
     if runs.empty:
