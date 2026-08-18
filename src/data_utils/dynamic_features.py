@@ -1,7 +1,9 @@
+import numpy as np
 import pandas as pd
 import talib
-import numpy as np
-from src.data_utils.features import market_regime_features, overlap, ichimoku
+
+from src.data_utils.features import ichimoku, market_regime_features, overlap
+
 
 def dynamic_features(df, parameters, scaler, col_close="close", col_high="high", col_low="low") -> pd.DataFrame:
 
@@ -32,7 +34,7 @@ def dynamic_features(df, parameters, scaler, col_close="close", col_high="high",
 
     df['ema_ha_wickstrength'] = df['ema_ha_wickstrength']/scaler
 
-    df.loc[:,'atr'] = talib.ATR(df[col_high], df[col_low], df[col_close], timeperiod=parameters['atr_period'])
+    df.loc[:,'atr'] = talib.ATR(df[col_high], df[col_low], df[col_close], timeperiod=parameters['atr_period'])/scaler/10
 
     df.loc[:,'upperband'], df.loc[:,'middleband'], df.loc[:,'lowerband'], df.loc[:,'ema1'], df.loc[:,'ema2'], df.loc[:,'sma1'], df.loc[:,'sma2'], df.loc[:,'midprice'], df.loc[:,'sar'] \
         = overlap(df, col_close=col_close, col_high=col_high, col_low=col_low, bb_periods=parameters['bb_periods'], bb_nbdev=parameters['bb_nbdev'], ema1_period=parameters['ema1_period'], sma1_period=parameters['sma1_period'], sma2_period=parameters['sma2_period'], sar_acc=parameters['sar_acc'], sar_max=parameters['sar_max'], midprice_window=parameters['midprice_window'])
@@ -46,8 +48,8 @@ def dynamic_features(df, parameters, scaler, col_close="close", col_high="high",
 
     df.loc[:,'tenkan_sen'], df.loc[:,'kijun_sen'] = ichimoku(df, col_high="ha_high", col_low="ha_low", tenkan_window=parameters['tenkan_window'], kijun_window=parameters['kijun_window'])
 
-    df.loc[:,'r_tenkan_sen'] = np.log(df['tenkan_sen']/df['ha_close'])*100/scaler
-    df.loc[:,'r_kijun_sen'] = np.log(df['kijun_sen']/df['ha_close'])*100/scaler
+    df.loc[:,'r_tenkan_sen'] = np.log(df['tenkan_sen']/df['ha_close'])*200/scaler
+    df.loc[:,'r_kijun_sen'] = np.log(df['kijun_sen']/df['ha_close'])*200/scaler
 
     # momentum
 
@@ -60,7 +62,7 @@ def dynamic_features(df, parameters, scaler, col_close="close", col_high="high",
                                                                  slowperiod=parameters['macd_slowperiod'], slowmatype=0,
                                                                  signalperiod=parameters['macd_signalperiod'], signalmatype=0)
     df.loc[:,'macd_slope'] = talib.LINEARREG_ANGLE(df['macd'], parameters['macd_slope_period'])
-    df['macdhist'] = df['macdhist']/scaler
+    df['macdhist'] = df['macdhist']/scaler/10
 
     df.loc[:,'rsi'] = (talib.RSI(df[col_close], timeperiod=parameters['rsi_period'])-50)/100
     df.loc[:,'rsi_ha'] = (talib.RSI(df['ha_close'], timeperiod=parameters['rsi_period'])-50)/100
@@ -89,9 +91,9 @@ def dynamic_features(df, parameters, scaler, col_close="close", col_high="high",
     # Compute Hilbert Transform Dominant Cycle
     #df['Hilbert_Dominant_Cycle'] = hilbert_dominant_cycle(df[col_close])
 
-    df.loc[:,'adx'] = talib.ADX(df[col_high],df[col_low],df[col_close],timeperiod=parameters['adx_timeperiod'])
-    df.loc[:,'di_plus'] = talib.PLUS_DI(df[col_high],df[col_low],df[col_close],timeperiod=parameters['di_timeperiod'])/10
-    df.loc[:,'di_minus'] = talib.MINUS_DI(df[col_high],df[col_low],df[col_close],timeperiod=parameters['di_timeperiod'])/10
+    df.loc[:,'adx'] = talib.ADX(df[col_high],df[col_low],df[col_close],timeperiod=parameters['adx_timeperiod'])/50-1
+    df.loc[:,'di_plus'] = talib.PLUS_DI(df[col_high],df[col_low],df[col_close],timeperiod=parameters['di_timeperiod'])/20-1
+    df.loc[:,'di_minus'] = talib.MINUS_DI(df[col_high],df[col_low],df[col_close],timeperiod=parameters['di_timeperiod'])/20-1
     df.loc[:,'di_diff'] = df['di_plus'] - df['di_minus']
 
     # # Prepare data

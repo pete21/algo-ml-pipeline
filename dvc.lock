@@ -3,17 +3,17 @@ stages:
   data_ingestion:
     cmd: python src/data/data_ingestion.py
     deps:
-    - path: data/src/DAX40_USDT_USDT-1m-futures.parquet
-      hash: md5
-      md5: 0ba3995134c25fc6deaa374de36876c7
-      size: 25995129
     - path: src/data/data_ingestion.py
       hash: md5
-      md5: d28ba3152df74e17e5bf06e40914429a
-      size: 5838
+      md5: cdea7cf7a726cfef17f5bcb62f0405fe
+      size: 7810
     params:
       params.yaml:
-        data_ingestion.file_name: DAX40_USDT_USDT-{timeframe}-futures.parquet
+        data_ingestion.data_path: data/src
+        data_ingestion.data_path_dest: data/raw
+        data_ingestion.data_source: questdb
+        data_ingestion.end_date: '2026-06-30'
+        data_ingestion.file_name: '{ticker}-{timeframe}-futures.parquet'
         data_ingestion.high_time_col: High
         data_ingestion.high_time_col_wavelet: Close_wavelet
         data_ingestion.index_barrier: 1
@@ -28,36 +28,10 @@ stages:
         - 10
         data_ingestion.low_time_col: Low
         data_ingestion.low_time_col_wavelet: Close_wavelet
-        data_ingestion.timeframe_minutes:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-        - 10
-        - 15
-        - 20
-        - 30
-        - 60
-        - 120
-        - 240
-        - 1440
-        data_ingestion.timeframe_scalers:
-        - 0.22
-        - 0.44
-        - 0.63
-        - 0.77
-        - 0.89
-        - 1
-        - 1.4
-        - 1.7
-        - 2
-        - 2.4
-        - 3.4
-        - 4.8
-        - 6.8
-        - 9.6
+        data_ingestion.start_date: '2024-07-01'
+        data_ingestion.table_name: DUKASCOPY_{ticker}_OHLC_{timeframe}
+        data_ingestion.ticker: DAX40
+        data_ingestion.timeframe: 1m
         data_ingestion.timeframes:
         - 10s
         - 1m
@@ -76,95 +50,211 @@ stages:
     outs:
     - path: data/raw
       hash: md5
-      md5: 7c7f242af223f0f8db989ef50a8e0612.dir
-      size: 35573131
+      md5: 727af31800fad4bc9c532231ec25307c.dir
+      size: 19310942
       nfiles: 3
   data_preprocessing:
     cmd: python src/data/data_preprocessing.py
     deps:
-    - path: data/raw/test.csv
+    - path: data/raw/data_ohlc_15m.csv
       hash: md5
-      md5: ea97ba82a4a25627bf4ffb52572484ea
-      size: 1348612
-    - path: data/raw/train.csv
+      md5: c3629e9ce2bc1b7923e1614210eef614
+      size: 2660644
+    - path: data/raw/data_ohlc_1h.csv
       hash: md5
-      md5: 1bd422dd6d135bced1d6c64a3e84a45d
-      size: 5571089
+      md5: 122a48907db5b57034a42acb76878bad
+      size: 685446
+    - path: data/raw/data_ohlc_5m.csv
+      hash: md5
+      md5: be80de65e5b0c76c959fa158618de339
+      size: 15964852
     - path: src/data/data_preprocessing.py
       hash: md5
-      md5: f997a07ec5d812b43a2bfa7ca740e7a0
-      size: 3715
+      md5: e2fd2469656225a1f8433c1088479d80
+      size: 6645
+    params:
+      params.yaml:
+        data_preprocessing.data_path: data/raw
+        data_preprocessing.data_path_dest: data/interim
+        data_preprocessing.file_name: data_ohlc_{timeframe}.csv
+        data_preprocessing.index_base: 5
+        data_preprocessing.indexes_higher:
+        - 7
+        - 10
+        data_preprocessing.local_timezone: Europe/Berlin
+        data_preprocessing.timeframe_scalers:
+        - 0.22
+        - 0.44
+        - 0.63
+        - 0.77
+        - 0.89
+        - 1
+        - 1.4
+        - 1.7
+        - 2
+        - 2.4
+        - 3.4
+        - 4.8
+        - 6.8
+        - 9.6
+        data_preprocessing.timeframes:
+        - 10s
+        - 1m
+        - 2m
+        - 3m
+        - 4m
+        - 5m
+        - 10m
+        - 15m
+        - 20m
+        - 30m
+        - 1h
+        - 2h
+        - 4h
+        - 1d
     outs:
     - path: data/interim
       hash: md5
-      md5: ba42408e7bd1e85685474d6a349ae57e.dir
-      size: 5134850
-      nfiles: 2
+      md5: f24e0ab3d38ee2187a827ee561941998.dir
+      size: 246614631
+      nfiles: 5
   model_building:
     cmd: python src/model/model_building.py
     deps:
-    - path: data/interim/train_processed.csv
+    - path: data/interim/data_static_features_15m.csv
       hash: md5
-      md5: 35027dfda8274bd9356544f2ff358aa4
-      size: 4134324
+      md5: d037e4cbacbfd00e89025ac3546cf4ac
+      size: 53726407
+    - path: data/interim/data_static_features_1h.csv
+      hash: md5
+      md5: 041b39a7f036c094d5661c5105a234dc
+      size: 13697171
+    - path: data/interim/data_static_features_5m.csv
+      hash: md5
+      md5: dced9f82dd06600375d1f36aa1c5d8fd
+      size: 179188942
     - path: src/model/model_building.py
       hash: md5
-      md5: 7535a489e792c486bd48d008c4e673c4
-      size: 5474
+      md5: 99b9eb09e06a8a6cd06782d0e8c5bd33
+      size: 10275
     params:
       params.yaml:
-        model_building.learning_rate: 0.09
-        model_building.max_depth: 20
-        model_building.max_features: 1000
-        model_building.n_estimators: 367
-        model_building.ngram_range:
+        model_building.col_y:
+        - labeling_multi
+        model_building.data_path: data/interim
+        model_building.evals_strategy: false
+        model_building.file_name: data_static_features_{timeframe}.csv
+        model_building.index_base: 5
+        model_building.indexes_higher:
+        - 7
+        - 10
+        model_building.list_X:
+        - ha_close
+        - Close
+        - tenkan_sen
+        - kijun_sen
+        - sine
+        - sine_diff_slope_2
+        - sine_diff_slope_5
+        - kama_trend_slow
+        - kama_trend_fast
+        - kama_trend_slow_diff
+        - kama_trend_fast_diff
+        - kama_trend_slow_diff2
+        - kama_trend_fast_diff2
+        - macdhist
+        - sma_cross
+        - lowerband_r
+        - stochk_slope
+        - dc_market_regime_ema_log
+        - ha_slope_2
+        - ema_cross
+        - log_ret_ha_1
+        - ppo
+        - upperband_r
+        - sar_r
+        - log_ret_ha_2
+        - stochd
+        - kama_diff
+        - bearish_gap
+        - rsi_slope
+        - sine_diff
+        - stochrsid
+        - stochrsik
+        - bullish_gap
+        - log_ret_ha_3
+        - ha_slope_10
+        - r_kijun_sen
+        - r_tenkan_sen
+        - displacement_hull
+        - displacement_hull_slope
+        - stochk
+        - ema_ha_sign
+        - ema_ha_wickstrength
+        - gap_hull
+        - gap_hull_slope
+        - di_plus
+        - di_minus
+        - cci_ha
+        - rsi
+        - rsi_ha
+        - di_diff
+        - willr
+        - close_wavelet_rolling
+        - permutation_entropy
+        - tail_index_1
+        - skew
+        - petrosian_fd
+        - long_pivot
+        - short_pivot
+        - atr
+        - adx
+        model_building.local_timezone: Europe/Berlin
+        model_building.model_name: xgboost_model_with_pca_v1
+        model_building.model_params_name: 
+          model_params_{timeframe}_v{version}.json
+        model_building.models_path: data/models
+        model_building.n_trials: 1
+        model_building.note: xgb-dax-pipeline with PCA
+        model_building.num_splits: 9
+        model_building.timeframe: 5m
+        model_building.timeframe_scalers:
+        - 0.22
+        - 0.44
+        - 0.63
+        - 0.77
+        - 0.89
         - 1
-        - 3
+        - 1.4
+        - 1.7
+        - 2
+        - 2.4
+        - 3.4
+        - 4.8
+        - 6.8
+        - 9.6
+        model_building.timeframes:
+        - 10s
+        - 1m
+        - 2m
+        - 3m
+        - 4m
+        - 5m
+        - 10m
+        - 15m
+        - 20m
+        - 30m
+        - 1h
+        - 2h
+        - 4h
+        - 1d
+        model_building.version: 1
     outs:
-    - path: lgbm_model.pkl
+    - path: data/models/model_params_5m_v1.json
       hash: md5
-      md5: feb66a4153c18043a06d474208c661bf
-      size: 3886723
-    - path: tfidf_vectorizer.pkl
+      md5: 138ca29ad2b5a6d3d0ab7726808dc11c
+      size: 1789
+    - path: data/models/optuna_trials.csv
       hash: md5
-      md5: 0fef1cfab7f15ebae4d8d21e5253f1be
-      size: 36874
-  model_evaluation:
-    cmd: python src/model/model_evaluation.py
-    deps:
-    - path: data/interim/test_processed.csv
-      hash: md5
-      md5: 4f30375397ec89fead1745ee6d70f201
-      size: 1000526
-    - path: data/interim/train_processed.csv
-      hash: md5
-      md5: 35027dfda8274bd9356544f2ff358aa4
-      size: 4134324
-    - path: lgbm_model.pkl
-      hash: md5
-      md5: feb66a4153c18043a06d474208c661bf
-      size: 3886723
-    - path: src/model/model_evaluation.py
-      hash: md5
-      md5: 2eca7ba9e7e434c2f12ee9fa2188e918
-      size: 7168
-    - path: tfidf_vectorizer.pkl
-      hash: md5
-      md5: 0fef1cfab7f15ebae4d8d21e5253f1be
-      size: 36874
-    outs:
-    - path: experiment_info.json
-      hash: md5
-      md5: 6de69f257408e2d22dbe0e092f9c95a9
-      size: 87
-  model_registration:
-    cmd: python src/model/register_model.py
-    deps:
-    - path: experiment_info.json
-      hash: md5
-      md5: 6de69f257408e2d22dbe0e092f9c95a9
-      size: 87
-    - path: src/model/register_model.py
-      hash: md5
-      md5: 79b2ad47909a81a7f451addd10ab58f5
-      size: 2427
+      md5: 2ece106dca313b50384cc07be3be35fb
+      size: 2174

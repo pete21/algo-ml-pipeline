@@ -1,5 +1,6 @@
 import numpy as np
 import pywt
+
 pywt.families(short=False)
 
 
@@ -43,15 +44,16 @@ pywt.families(short=False)
 # plt.show()
 
 
-# wavelet = pywt.Wavelet('db6')
 
 def wavelet_transform(data, lvl=8):
+    wavelet = pywt.Wavelet('db6')
     coeff = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
     return coeff
 
 # Inverse wavelet transform
 def inverse_wavelet_transform(coeffs, lvl=8, clear_levels=4):
     # remove last <clear_levels> finer details
+    wavelet = pywt.Wavelet('db6')
     for i in range(clear_levels):
         coeffs[-i-1] = np.zeros(coeffs[-i-1].shape)
     return pywt.waverec(coeffs, wavelet, mode='symmetric')
@@ -66,7 +68,7 @@ def wavelet_denoising(data, wavelet='db4', lvl=8):
     return denoised_data
 
 
-def wavelet_denoising2(data, wavelet='db4', lvl=8, clear_levels=4):
+def wavelet_denoising2(data, wavelet='db4', lvl=7, clear_levels=4):
     coeffs = pywt.wavedec(data, wavelet, mode='symmetric', level=lvl)
     threshold = np.std(coeffs[0])
     for i in range(clear_levels):
@@ -74,7 +76,7 @@ def wavelet_denoising2(data, wavelet='db4', lvl=8, clear_levels=4):
     denoised_data = pywt.waverec(coeffs, wavelet)
     #print("Original data: {}".format(data))
     #print("Denoised data using wavelet {}: {}".format(wavelet, denoised_data))
-    return denoised_data
+    return denoised_data[-len(data):]
 
 
 def wavelet_denoising_rolling(data, wavelet='db4', lvl=8, clear_levels=4, threshold=None):
@@ -87,3 +89,24 @@ def wavelet_denoising_rolling(data, wavelet='db4', lvl=8, clear_levels=4, thresh
     #print("Original data: {}".format(data))
     #print("Denoised data using wavelet {}: {}".format(wavelet, denoised_data))
     return denoised_data[-1]
+
+
+def denoise_signal(data, wavelet='db4', level=2):               # Gemini
+    # 1. Multilevel wavelet decomposition
+    coeffs = pywt.wavedec(data, wavelet, level=level)
+    
+    # 2. Estimate noise standard deviation from the finest detail coefficients (cD1)
+    sigma = np.median(np.abs(coeffs[-1])) / 0.6745
+    
+    # 3. Calculate universal threshold
+    threshold = sigma * np.sqrt(2 * np.log(len(data)))
+    
+    # 4. Threshold detail coefficients (keep approximation coefficients coeffs[0] as-is)
+    coeffs_thresh = [coeffs[0]]
+    for detail in coeffs[1:]:
+        coeffs_thresh.append(pywt.threshold(detail, value=threshold, mode='soft'))
+        
+    # 5. Inverse wavelet transform reconstruction
+    denoised_data = pywt.waverec(coeffs_thresh, wavelet)
+    
+    return denoised_data[:len(data)]

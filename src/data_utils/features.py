@@ -1,43 +1,140 @@
-import talib
-from hurst import compute_Hc
-from scipy.signal import hilbert
 from math import exp
+
+import numba
 import numpy as np
+
 # import polars as pl
 import pandas as pd
+import talib
+from hurst import compute_Hc
 from pandas import DataFrame, Series
+from pykalman import KalmanFilter
+from scipy.signal import hilbert
+
 #from functools import lru_cache
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import StandardScaler
-import numba
-from src.data_utils.wavelet import wavelet_denoising_rolling
-from pykalman import KalmanFilter
-from src.data_utils.features_engineering.volatility.close_to_close import close_to_close_volatility
-from src.data_utils.target_engineering.directional.barriers import double_barrier_labeling, triple_barrier_labeling
-from src.data_utils.features_engineering.volatility.range_estimators import rogers_satchell_volatility
-from src.data_utils.features_engineering.volatility.range_estimators import parkinson_volatility
-from src.data_utils.features_engineering.volatility.range_estimators import yang_zhang_volatility
-import src.data_utils.features_engineering.trend as trend
-import src.data_utils.features_engineering.math as math
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
+from src.data_utils.features_engineering import math, trend
+from src.data_utils.features_engineering.volatility.close_to_close import (
+    close_to_close_volatility,
+)
+from src.data_utils.features_engineering.volatility.range_estimators import (
+    parkinson_volatility,
+    rogers_satchell_volatility,
+    yang_zhang_volatility,
+)
+from src.data_utils.target_engineering.directional.barriers import (
+    double_barrier_labeling,
+    triple_barrier_labeling,
+)
 
 ### Target
 
-def build_target(df, open_col="open", high_col="high", low_col="low", high_time_col="high_time",
+def build_target_triple(df, open_col="open", high_col="high", low_col="low", high_time_col="high_time",
     low_time_col="low_time", tp=0.0025, ema_period=10, ema_reversed_period=40, threshold_long=0.75, threshold_short=0.25):
     
     # labeling_binary = double_barrier_labeling(df, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
-    labeling_binary = triple_barrier_labeling(df, 4, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
+    labeling_binary = triple_barrier_labeling(df, 2, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
 
-    labeling_ema = talib.EMA(labeling_binary, ema_period)
+    labeling_ema = talib.EMA(labeling_binary, ema_period).fillna(0)
 
     labeling_reversed = labeling_binary[::-1]
-    labeling_ema_reversed = talib.EMA(labeling_reversed, ema_reversed_period)
-    labeling_dual_ema = np.roll((labeling_ema + labeling_ema_reversed)/2, 3)
+    labeling_ema_reversed = talib.EMA(labeling_reversed, ema_reversed_period).fillna(0)
+    # labeling_dual_ema = np.roll((labeling_ema + labeling_ema_reversed)/2, 1)
+    labeling_dual_ema = (labeling_ema + labeling_ema_reversed)/2
     # labeling_dual_ema.fillna(0, inplace=True)
     labeling_multi = np.where(labeling_dual_ema>=threshold_long*2-1, 1, np.where(labeling_dual_ema<=threshold_short*2-1, -1, 0))
 
     return labeling_binary, labeling_dual_ema, labeling_multi
+
+def build_target(df, open_col="open", high_col="high", low_col="low", high_time_col="high_time",
+    low_time_col="low_time", tp=0.003, ema_period=10, ema_reversed_period=40, threshold_long=0.8, threshold_short=0.2):
+    
+    labeling_binary = double_barrier_labeling(df, open_col, high_col, low_col, high_time_col, low_time_col, tp=tp, sl=-tp, buy=True)
+
+    labeling_ema = talib.EMA(labeling_binary, ema_period).fillna(0)
+
+    labeling_reversed = labeling_binary[::-1]
+    labeling_ema_reversed = talib.EMA(labeling_reversed, ema_reversed_period).fillna(0)
+    # labeling_dual_ema = np.roll((labeling_ema + labeling_ema_reversed)/2, 1)
+    labeling_dual_ema = (labeling_ema + labeling_ema_reversed)/2
+    # labeling_dual_ema.fillna(0, inplace=True)
+    labeling_multi = np.where(labeling_dual_ema>=threshold_long*2-1, 1, np.where(labeling_dual_ema<=threshold_short*2-1, -1, 0))
+
+    return labeling_binary, labeling_dual_ema, labeling_multi
+
+# Target new 2
+def build_target_2(df, labeling_col="labeling_dual_ema", threshold=0.48):
+    df.loc[:,"l_min"] = df["ha_close"].shift(-9).rolling(window=9).min()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"l_max"] = df["ha_close"].shift(3).rolling(window=9).max()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"s_min"] = df["ha_close"].shift(3).rolling(window=9).min()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"s_max"] = df["ha_close"].shift(-9).rolling(window=9).max()#/ml_data[params['index_base']]["ha_close"]
+    # ml_data[params['index_base']].loc[:,"labeling_multi_return"] = (ml_data[params['index_base']]["ha_close"].shift(-24)/ml_data[params['index_base']]["ha_close"])
+
+    df.loc[:,"signal_up"] = 0
+    df.loc[:,"signal_down"] = 0
+    # mask_up = (ml_data[params['index_base']].loc[:,"labeling_multi_return"] > 1+threshold) & (ml_data[params['index_base']].loc[:,"labeling_multi_min"]>0.9993)
+    # mask_down = (ml_data[params['index_base']].loc[:,"labeling_multi_return"] < 1-threshold) & (ml_data[params['index_base']].loc[:,"labeling_multi_max"]<1.0007)
+    mask_up = df.loc[:,"l_min"]>df.loc[:,"l_max"]
+    mask_down = df.loc[:,"s_max"]<df.loc[:,"s_min"]
+    # mask_flat = ~(mask_up | mask_down)
+    df.loc[mask_up, "signal_up"] = 1
+    df.loc[mask_down, "signal_down"] = -1
+    # ml_data[params['index_base']].loc[mask_flat, "labeling_multi"] = 0
+    # ml_data[params['index_base']].loc[:,"labeling_multi2"] = ml_data[params['index_base']]["labeling_multi2"].shift(1)
+    # ml_data[params['index_base']].loc[:,"labeling_multi2"] = ml_data[params['index_base']]["labeling_multi2"].fillna(0)
+    df.loc[:,"labeling_multi2_sma"] = (df[labeling_col]+df["signal_up"]+df["signal_down"]).rolling(9).mean()/2
+
+    df.loc[:,"labeling_multi"] = 0
+    mask_up = df.loc[:,"labeling_multi2_sma"] > threshold
+    mask_down = df.loc[:,"labeling_multi2_sma"] < -threshold
+    df.loc[mask_up,"labeling_multi"] = 1
+    df.loc[mask_down,"labeling_multi"] = -1
+
+    return df
+
+# Target new 2b
+
+def build_target_2b(df, ref_column="ha_close"):
+    df.loc[:,"l_min"] = df[ref_column].shift(-24).rolling(window=24).min()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"l_max"] = df[ref_column].shift(0).rolling(window=24).max()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"s_min"] = df[ref_column].shift(0).rolling(window=24).min()#/ml_data[params['index_base']]["ha_close"]
+    df.loc[:,"s_max"] = df[ref_column].shift(-24).rolling(window=24).max()#/ml_data[params['index_base']]["ha_close"]
+    # ml_data[params['index_base']].loc[:,"labeling_multi_return"] = (ml_data[params['index_base']]["ha_close"].shift(-24)/ml_data[params['index_base']]["ha_close"])
+
+    df.loc[:,"labeling_multi_up"] = (df.loc[:,"l_min"]/df.loc[:,"l_max"]-1)
+    df.loc[:, "labeling_multi_down"] = (-df.loc[:,"s_min"]/df.loc[:,"s_max"]+1)
+
+    # df.loc[:,"labeling_multi2"] = (-np.log1p(-100*df["labeling_multi_up"])+np.log1p(100*df["labeling_multi_down"])).rolling(2).mean()
+    df.loc[:,"labeling_multi2"] = (-np.log1p(-200*df["labeling_multi_up"]+0.1)+np.log1p(200*df["labeling_multi_down"]+0.1)).ewm(span=12, adjust=False).mean()
+
+
+    # df.loc[:,"labeling_multi2_sma"] = (df[labeling_col]+df["signal_up"]+df["signal_down"]).rolling(9).mean()/2
+
+    return df
+
+# Target new 2c
+
+def build_target_2c(df, ref_column="ha_close", periods=24):
+
+    df.loc[:,"l_min"] = df[ref_column].shift(-periods).rolling(window=periods).min()#/dax_data[index_base]["ha_close"]
+    df.loc[:,"l_max"] = df["High"].rolling(window=periods).mean()#/dax_data[index_base]["ha_close"]
+
+    df.loc[:,"s_min"] = df["Low"].rolling(window=periods).mean()#/dax_data[index_base]["ha_close"]
+    df.loc[:,"s_max"] = df[ref_column].shift(-periods).rolling(window=periods).max()#/dax_data[index_base]["ha_close"]
+
+
+    df.loc[:,"labeling_multi_up"] = (df.loc[:,"l_min"]/df.loc[:,"l_max"]-1)
+    df.loc[:, "labeling_multi_down"] = (-df.loc[:,"s_min"]/df.loc[:,"s_max"]+1)
+
+    # df.loc[:,"labeling_multi2"] = (-np.log1p(-100*df["labeling_multi_up"])+np.log1p(100*df["labeling_multi_down"])).rolling(2).mean()
+    df.loc[:,"labeling_multi2"] = (-np.log1p(-200*df["labeling_multi_up"])+np.log1p(200*df["labeling_multi_down"])).ewm(span=12, adjust=False).mean()/2
+
+    # df.loc[:,"labeling_multi2_sma"] = (df[labeling_col]+df["signal_up"]+df["signal_down"]).rolling(9).mean()/2
+
+    return df
 
 
 ### Candle
@@ -430,8 +527,8 @@ def kama_market_regime(df, col="Close", l1_fast=50, l2_fast=2, l3_fast=30, l1_sl
     kama_diff_pct = (kama_fast - kama_slow)/kama_slow * 100
 
     #    kama_trend = np.sign(kama_diff)
-    kama_trend_slow = talib.LINEARREG_ANGLE(kama_slow, kama_trend_period)
-    kama_trend_fast = talib.LINEARREG_ANGLE(kama_fast, kama_trend_period)
+    kama_trend_slow = talib.LINEARREG_ANGLE(kama_slow, kama_trend_period)/10
+    kama_trend_fast = talib.LINEARREG_ANGLE(kama_fast, kama_trend_period)/10
 
     return kama_fast, kama_slow, kama_diff_pct, kama_trend_slow, kama_trend_fast
 
@@ -753,7 +850,7 @@ def momentum(df, col_close="Close", col_high="High", col_low="Low", rsi_period=1
     cci = talib.CCI(df.High, df.Low, df.Close, timeperiod=14)
 
     macd, macdsignal, macdhist = talib.MACDEXT(df.Close, fastperiod=12, fastmatype=0, slowperiod=26, slowmatype=0, signalperiod=9, signalmatype=0)
-
+    macdhist = macdhist/10
     ppo = talib.PPO(df.Close, fastperiod=12, slowperiod=26, matype=0)
 
     minus_di = talib.MINUS_DI(df.High, df.Low, df.Close, timeperiod=14)
@@ -780,7 +877,7 @@ def ichimoku(df, col_high="High", col_low="Low", tenkan_window=9, kijun_window=2
 
 ## PCA
 
-def calc_kernel_pca(df, day_range, window, col_features, col_pca_comp):
+def calc_kernel_pca(df, day_range, window: int, col_features: list, col_pca_comp: list):
     scaler = StandardScaler()
     # Call the PCA method from scikit learn
     num_components = len(col_pca_comp)
@@ -792,19 +889,19 @@ def calc_kernel_pca(df, day_range, window, col_features, col_pca_comp):
         current_date = day_range[current_date_ind]
         current_date_window_start = day_range[current_date_ind-window]
         # Get data for current date
-        current_slice = df[df.index.date == current_date]
+        current_slice = df[df['local_date'].dt.date == current_date][col_features]
         if current_slice.shape[0]==0:
             print(f"Current slice is empty for {current_date}")
             continue
         # Get data for previous 'window' days
-        mask = (df.index.date < current_date) & (df.index.date >= current_date_window_start)
-        historical_slice = df[mask]
-    #    print(current_slice.shape)
-    #    print(historical_slice.shape)
+        mask = (df['local_date'].dt.date < current_date) & (df['local_date'].dt.date >= current_date_window_start)
+        historical_slice = df[mask][col_features]
+        # print(current_slice)
+        # print(historical_slice)
     
         # Standardize the features using the training set
-        historical_slice_scaled = scaler.fit_transform(historical_slice[col_features])  # Fit on training data
-        current_slice_scaled = scaler.transform(current_slice[col_features])
+        historical_slice_scaled = scaler.fit_transform(historical_slice)  # Fit on training data
+        current_slice_scaled = scaler.transform(current_slice)
     
         # Train the PCA on the train set
         pca.fit(historical_slice_scaled)
@@ -814,9 +911,137 @@ def calc_kernel_pca(df, day_range, window, col_features, col_pca_comp):
     
         current_slice_scaled_pca_scores_df = pd.DataFrame(current_slice_scaled_pca_scores, columns = col_pca_comp, index=current_slice.index)
         current_slice_scaled_pca_scores_df['date'] = current_slice.index
+        # print(current_slice_scaled_pca_scores_df)
         current_slice_scaled_pca_scores_df_sum = pd.concat([current_slice_scaled_pca_scores_df_sum, current_slice_scaled_pca_scores_df])
-        current_slice_scaled_pca_scores_df_sum.set_index(['date'], inplace=True)
+        # print(current_slice_scaled_pca_scores_df_sum)
+    
+    
+    current_slice_scaled_pca_scores_df_sum.set_index(['date'], inplace=True)
     return current_slice_scaled_pca_scores_df_sum
+
+
+def sarima_features(df, day_range, window: int, col_feature: str, sarima_period: int):
+    scaler = StandardScaler()
+
+    current_slice_scaled_sarima_df_sum = pd.DataFrame()
+    for current_date_ind in range(window, len(day_range)):
+        
+        current_date = day_range[current_date_ind]
+        current_date_window_start = day_range[current_date_ind-window]
+        # Get data for current date
+        current_slice = df[df['local_date'].dt.date == current_date][[col_feature]]
+        if current_slice.shape[0]==0:
+            print(f"Current slice is empty for {current_date}")
+            continue
+        # Get data for previous 'window' days
+        mask = (df['local_date'].dt.date < current_date) & (df['local_date'].dt.date >= current_date_window_start)
+        historical_slice = df[mask][[col_feature]]
+        # print(current_slice)
+        # print(historical_slice)
+    
+        # Standardize the features using the training set
+        historical_slice_scaled = scaler.fit_transform(historical_slice)  # Fit on training data
+        # current_slice_scaled = scaler.transform(current_slice)
+    
+        model = SARIMAX(historical_slice_scaled,
+                        order=(2, 0, 1),
+                        seasonal_order=(0, 1, 1, sarima_period),
+                        enforce_stationarity=False,
+                        enforce_invertibility=False
+                        )
+        fitted_model = model.fit(disp=False)
+
+        predictions_scaled = fitted_model.forecast(steps=1)
+
+        # To calculate true errors, transform data back to the original price/index scale
+        predictions_original = scaler.inverse_transform(predictions_scaled)
+        predictions_series = pd.Series(predictions_original, index=current_slice.index)
+
+        # The raw residuals (errors) for each point in time
+        residuals = current_slice - predictions_series
+
+    
+        current_slice_scaled_sarima_scores_df = pd.DataFrame(predictions_original, columns = ['sarima_score'], index=current_slice.index)
+        current_slice_scaled_sarima_residuals_df = pd.DataFrame(residuals, columns = ['sarima_residuals'], index=current_slice.index)
+        current_slice_scaled_sarima_residuals_df['date'] = current_slice.index
+        current_slice_scaled_sarima_df_sum = pd.concat([current_slice_scaled_sarima_df_sum, current_slice_scaled_sarima_residuals_df, current_slice_scaled_sarima_scores_df])
+        # print(current_slice_scaled_pca_scores_df_sum)
+
+
+def sarima_features_rolling_1_step(df, day_range, window: int, col_feature: str, sarima_period: int):
+    scaler = StandardScaler()
+
+    current_slice_scaled_sarima_df_sum = pd.DataFrame()
+    for current_date_ind in range(window, len(day_range)):
+        
+        current_date = day_range[current_date_ind]
+        current_date_window_start = day_range[current_date_ind-window]
+        # Get data for current date
+        current_slice = df[df['local_date'].dt.date == current_date][[col_feature]]
+        if current_slice.shape[0]==0:
+            print(f"Current slice is empty for {current_date}")
+            continue
+        # Get data for previous 'window' days
+        mask = (df['local_date'].dt.date < current_date) & (df['local_date'].dt.date >= current_date_window_start)
+        historical_slice = df[mask][[col_feature]]
+        # print(current_slice)
+        # print(historical_slice)
+    
+        # Standardize the features using the training set
+        historical_slice_scaled = scaler.fit_transform(historical_slice)  # Fit on training data
+        current_slice_scaled = scaler.transform(current_slice)
+    
+        model = SARIMAX(historical_slice_scaled,
+                        order=(2, 0, 1),
+                        seasonal_order=(0, 1, 1, sarima_period),
+                        enforce_stationarity=False,
+                        enforce_invertibility=False
+                        )
+        fitted_model = model.fit(disp=False)
+
+        # ==========================================================
+        # 3. CALCULATE ROLLING PREDICTIONS ON TEST DATA
+        # ==========================================================
+        predictions_scaled = []
+        history = historical_slice_scaled.copy()
+
+        print("\nGenerating 1-step-ahead rolling predictions...")
+        for actual_value in current_slice_scaled:
+            # 1. Fit/Extend the existing model structure with the accumulated history
+            # 'extend' preserves the trained parameters but appends the new data point
+            current_model = SARIMAX(
+                history,
+                order=(2, 0, 1),
+                seasonal_order=(0, 1, 1, sarima_period),
+                enforce_stationarity=False,
+                enforce_invertibility=False
+            )
+            # Use the parameters found during the initial training phase
+            res = current_model.filter(fitted_model.params)
+            
+            # 2. Forecast exactly 1 step into the future
+            next_pred = res.forecast(steps=1)
+            predictions_scaled.append(next_pred)
+            
+            # 3. Update the history array with the true observed value for the next loop
+            # history = pd.concat([history, pd.Series([actual_value], index=[current_slice_scaled.index[len(predictions_scaled)-1]])])
+            history = np.concatenate([history, [actual_value]])
+
+
+        # To calculate true errors, transform data back to the original price/index scale
+        predictions_original = scaler.inverse_transform(predictions_scaled)
+        predictions_series = pd.Series(predictions_original, index=current_slice.index)
+
+        # The raw residuals (errors) for each point in time
+        residuals = current_slice - predictions_series
+
+    
+        current_slice_scaled_sarima_scores_df = pd.DataFrame(predictions_original, columns = ['sarima_score'], index=current_slice.index)
+        current_slice_scaled_sarima_residuals_df = pd.DataFrame(residuals, columns = ['sarima_residuals'], index=current_slice.index)
+        current_slice_scaled_sarima_residuals_df['date'] = current_slice.index
+        current_slice_scaled_sarima_df_sum = pd.concat([current_slice_scaled_sarima_df_sum, current_slice_scaled_sarima_residuals_df, current_slice_scaled_sarima_scores_df])
+        # print(current_slice_scaled_pca_scores_df_sum)
+
 
 
 def market_regime_features(df, col_close="Close", col_high="High", col_low="Low",l1_fast=40,l2_fast=2,l3_fast=30,l1_slow=100,l2_slow=2,l3_slow=30, displacement_strength=3, market_regime_threshold=0.0015,
@@ -831,11 +1056,11 @@ def market_regime_features(df, col_close="Close", col_high="High", col_low="Low"
     df['dc_market_regime_ema'] = talib.EMA(df.loc[:,"dc_market_regime"], dc_market_regime_period)
     df['dc_market_regime_wma'] = talib.WMA(
                 2 * talib.WMA(df.loc[:,"dc_market_regime"], dc_market_regime_period // 2) - talib.WMA(df.loc[:,"dc_market_regime"], dc_market_regime_period),
-                int(round(np.sqrt(dc_market_regime_period)))
+                round(np.sqrt(dc_market_regime_period))
     )
 
     #log_wma = np.log1p(np.abs(df["dc_market_regime_wma"]))*np.sign(df["dc_market_regime_wma"])
-    df['dc_market_regime_ema_log'] = np.log1p(np.abs(df["dc_market_regime_ema"]))*np.sign(df["dc_market_regime_ema"])
+    df['dc_market_regime_ema_log'] = np.log1p(np.abs(df["dc_market_regime_ema"]))*np.sign(df["dc_market_regime_ema"])*10
 
     df['kama_regime_fast'], df['kama_regime_slow'], df['kama_diff'], df['kama_trend_slow'], df['kama_trend_fast'] = kama_market_regime(df, col_close,
                                                                                                            l1_fast=l1_fast,
@@ -850,9 +1075,9 @@ def market_regime_features(df, col_close="Close", col_high="High", col_low="Low"
 # Replacement with hull
     df['gap_hull'] = talib.WMA(
                 2 * talib.WMA(df["bullish_gap"]+df["bearish_gap"], gap_hull_period // 2) - talib.WMA(df["bullish_gap"]+df["bearish_gap"], gap_hull_period),
-                int(round(np.sqrt(gap_hull_period))),
+                round(np.sqrt(gap_hull_period)),
     )
-    df['gap_hull_slope'] = talib.LINEARREG_ANGLE(df['gap_hull'], gap_hull_slope_period)
+    df['gap_hull_slope'] = talib.LINEARREG_ANGLE(df['gap_hull'], gap_hull_slope_period)/10
 #    df['gap_ema'] = talib.EMA(df.loc[:,"bullish_gap"]+df.loc[:,"bearish_gap"], gap_ema_period)*2
 #    df['gap_ema_slope'] = talib.LINEARREG_ANGLE(df['gap_hull'], gap_ema_slope_period)
 #
@@ -966,8 +1191,8 @@ def supertrend(dataframe: pd.DataFrame, multiplier, atr_period=14, close_col="cl
 
 # Elliot Wave Oscillator
 def ewo(dataframe, sma1_length=5, sma2_length=35):
-    sma1 = ta.EMA(dataframe, timeperiod=sma1_length)
-    sma2 = ta.EMA(dataframe, timeperiod=sma2_length)
+    sma1 = talib.EMA(dataframe, timeperiod=sma1_length)
+    sma2 = talib.EMA(dataframe, timeperiod=sma2_length)
     smadif = (sma1 - sma2) / dataframe["close"] * 100
     return smadif
 
@@ -1032,7 +1257,7 @@ def williams_r(dataframe: DataFrame, period: int = 14) -> Series:
     of the past N days (for a given N). It was developed by a publisher and promoter of trading materials, Larry Williams.
     Its purpose is to tell whether a stock or commodity market is trading near the high or the low, or somewhere in between,
     of its recent trading range.
-    The oscillator is on a negative scale, from âˆ’100 (lowest) up to 0 (highest).
+    The oscillator is on a negative scale, from -100 (lowest) up to 0 (highest).
     """
     highest_high = dataframe["high"].rolling(center=False, window=period).max()
     lowest_low = dataframe["low"].rolling(center=False, window=period).min()
@@ -1049,14 +1274,14 @@ def vwma(dataframe: DataFrame, length: int = 10):
     """Indicator: Volume Weighted Moving Average (VWMA)"""
     # Calculate Result
     pv = dataframe["close"] * dataframe["volume"]
-    vwma = Series(ta.SMA(pv, timeperiod=length) / ta.SMA(dataframe["volume"], timeperiod=length))
+    vwma = Series(talib.SMA(pv, timeperiod=length) / talib.SMA(dataframe["volume"], timeperiod=length))
     return vwma
 
 
 # Modified Elder Ray Index
 
 def moderi(dataframe: DataFrame, len_slow_ma: int = 32) -> Series:
-    slow_ma = Series(ta.EMA(vwma(dataframe, length=len_slow_ma), timeperiod=len_slow_ma))
+    slow_ma = Series(talib.EMA(vwma(dataframe, length=len_slow_ma), timeperiod=len_slow_ma))
     return slow_ma >= slow_ma.shift(1)  # we just need true & false for ERI trend
 
 
@@ -1068,7 +1293,7 @@ def zlema(dataframe, timeperiod):
         ema_data = dataframe + (dataframe - dataframe.shift(lag))
     else:
         ema_data = 2*dataframe["close"] - dataframe["close"].shift(lag)
-    return ta.EMA(ema_data, timeperiod=timeperiod)
+    return talib.EMA(ema_data, timeperiod=timeperiod)
 
 
 # zlhull
@@ -1079,8 +1304,8 @@ def zlhull(dataframe, timeperiod):
         wma_data = dataframe + (dataframe - dataframe.shift(lag))
     else:
         wma_data = 2*dataframe["close"] - dataframe["close"].shift(lag)
-    return ta.WMA(
-        2 * ta.WMA(wma_data, int(math.floor(timeperiod / 2))) - ta.WMA(wma_data, timeperiod),
+    return talib.WMA(
+        2 * talib.WMA(wma_data, int(math.floor(timeperiod / 2))) - talib.WMA(wma_data, timeperiod),
         int(round(np.sqrt(timeperiod))),
     )
 
@@ -1089,14 +1314,14 @@ def zlhull(dataframe, timeperiod):
 
 def hull(dataframe, timeperiod):
     if isinstance(dataframe, Series):
-        return ta.WMA(
-            2 * ta.WMA(dataframe, int(math.floor(timeperiod / 2))) - ta.WMA(dataframe, timeperiod),
+        return talib.WMA(
+            2 * talib.WMA(dataframe, int(math.floor(timeperiod / 2))) - talib.WMA(dataframe, timeperiod),
             int(round(np.sqrt(timeperiod))),
         )
     else:
-        return ta.WMA(
-            2 * ta.WMA(dataframe["close"], int(math.floor(timeperiod / 2)))
-            - ta.WMA(dataframe["close"], timeperiod),
+        return talib.WMA(
+            2 * talib.WMA(dataframe["close"], int(math.floor(timeperiod / 2)))
+            - talib.WMA(dataframe["close"], timeperiod),
             int(round(np.sqrt(timeperiod))),
         )
 

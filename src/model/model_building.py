@@ -1,33 +1,19 @@
-
-import mlflow
-import numpy as np
-import pandas as pd
-import os
-import json
 import logging
-from src.data_utils.utils import load_params, load_json_params, get_dates
-from src.backtesting.optimization import objective
-from datetime import date, datetime
+import os
+from datetime import datetime
 
+import dvc.api
+import mlflow
 import optuna
-# from optuna.visualization import plot_param_importances, plot_contour, plot_slice
-# from optuna.visualization import plot_contour
-# from optuna.visualization import plot_edf
-# from optuna.visualization import plot_intermediate_values
-# from optuna.visualization import plot_optimization_history
-# from optuna.visualization import plot_parallel_coordinate
-# from optuna.visualization import plot_param_importances
-# from optuna.visualization import plot_rank
-# from optuna.visualization import plot_slice
-# from optuna.visualization import plot_timeline
-# from optuna.importance import get_param_importances
+import pandas as pd
+import pytz
+from dotenv import load_dotenv
 
-# Set credentials matching your .env file
-os.environ["AWS_ACCESS_KEY_ID"] = "minio"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "minio123"
+from src.backtesting.optimization import objective
+from src.data_utils.utils import get_dates
+from src.model.mlflow_utils import create_mlflow_experiment
 
-# Point to your remote MinIO instance (Notice the remote IP and port 9900)
-os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://192.168.10.250:9900"
+load_dotenv()
 
 
 # logging configuration
@@ -37,7 +23,7 @@ logger.setLevel('DEBUG')
 console_handler = logging.StreamHandler()
 console_handler.setLevel('DEBUG')
 
-file_handler = logging.FileHandler('model_building_errors.log')
+file_handler = logging.FileHandler('model_building.log')
 file_handler.setLevel('ERROR')
 
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -47,26 +33,39 @@ file_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
+def ceiling_division(n, d):
+    return -(n // -d)
 
 def load_data(data_path: str, params: dict) -> dict:
     """Load data from a CSV file."""
+    local_timezone = pytz.timezone(params['local_timezone'])
+
     try:
         data = {}
-        print(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][params['model_building']['index_base']])))
-        print("Loading data for index base: ", params['model_building']['index_base'])
-        data[params['model_building']['index_base']] = pd.read_csv(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][params['model_building']['index_base']])), parse_dates=True, index_col='date')
+        print(os.path.join(data_path, params['ticker'], params['file_name'].format(timeframe=params['timeframes'][params['index_base']])))
+        print("Loading data for index base: ", params['index_base'])
+        data[params['index_base']] = pd.read_csv(os.path.join(data_path, params['ticker'], params['file_name'].format(timeframe=params['timeframes'][params['index_base']])), parse_dates=True, index_col='date')
         # data[params['data_preprocessing']['index_base']]["high_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["high_time"])
         # data[params['data_preprocessing']['index_base']]["low_time"] = pd.to_datetime(data[params['data_preprocessing']['index_base']]["low_time"])
-        
-        for i in params['model_building']['indexes_higher']:
-            print(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][i])))
+        data[params['index_base']]['local_date'] = data[params['index_base']].index.tz_localize('UTC').tz_convert(local_timezone)
+        data[params['index_base']]["date_merge"] = data[params['index_base']].index
+        print(data[params['index_base']].head())
+
+        for i in params['indexes_higher']:
+            print(os.path.join(data_path, params['ticker'], params['file_name'].format(timeframe=params['timeframes'][i])))
             print("Loading data for index: ", i)
-            data[i] = pd.read_csv(os.path.join(data_path, params['model_building']['file_name'].format(timeframe=params['model_building']['timeframes'][i])), parse_dates=True, index_col='date')
-        
-        data[params['model_building']['index_base']]["date_merge"] = data[params['model_building']['index_base']].index
-        for i in params['model_building']['indexes_higher']:
-            data[i]["date_merge"] = data[i].index
-        #     data[i]["date_merge"] = pd.to_datetime(data[i]["date_merge"])
+            data[i] = pd.read_csv(os.path.join(data_path, params['ticker'], params['file_name'].format(timeframe=params['timeframes'][i])), parse_dates=True, index_col='date')
+            # data[i]['local_date'] = data[i].index.tz_localize('UTC').tz_convert(local_timezone)
+            data[i]["date_merge"] = (
+                data[i].index
+                + pd.to_timedelta(params['timeframe_minutes'][i], "m")
+                - pd.to_timedelta(params['timeframe_minutes'][params['index_base']], "m")
+            )
+
+            # for each value of data[i]["date_merge"], if minute value of data[i]["date_merge"] is not divisible by params['timeframe_minutes'][params['index_base']], set the minute value to the next divisible value greater than the current value
+            data[i]["date_merge"] = data[i]["date_merge"].apply(lambda x: x.replace(minute=ceiling_division(x.minute, params['timeframe_minutes'][params['index_base']]) * params['timeframe_minutes'][params['index_base']]))
+
+            print(data[i].head())
 
         logger.debug('Data loaded from %s', data_path)
         return data
@@ -129,18 +128,6 @@ def load_data(data_path: str, params: dict) -> dict:
 #         raise
 
 
-def save_model(model_params: dict, file_path: str) -> None:
-    """Save the trained model parameters to a file."""
-    try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-        with open(file_path, 'w') as file:
-            json.dump(model_params, file)
-        logger.debug('Model parameters saved to %s', file_path)
-    except Exception as e:
-        logger.error('Error occurred while saving the model parameters: %s', e)
-        raise
-
 
 # def get_root_directory() -> str:
 #     """Get the root directory (two levels up from this script's location)."""
@@ -169,118 +156,86 @@ def save_model(model_params: dict, file_path: str) -> None:
 #       return mlflow.create_experiment(experiment_name)
 
 
-def create_mlflow_experiment(experiment_name: str, mlflow_tracking_uri: str, tags: dict)->str:
-    """
-    Function to create an MLFlow experiment with a defined experiment name.
-    """
-
-    # Set MLFLow tracking URI
-    print("Setting MLFlow tracking URI...")
-    mlflow.set_tracking_uri(mlflow_tracking_uri)
-    logging.info("MLFlow Tracking URI URI set as: %s", mlflow_tracking_uri)
-
-    logging.info("Creating experiment...")
-    print("Creating experiment...")
-
-    try:
-        # Create the experiment. It returns the ID of the created experiment.
-        experiment_id = mlflow.create_experiment(name=experiment_name)
-        print(f"Experiment '{experiment_name}' created with ID: {experiment_id}")
-    except mlflow.exceptions.MlflowException as e:
-        # Handle cases where the experiment might already exist
-        print(f"Experiment '{experiment_name}' already exists.")
-        # Optionally, get the ID of the existing experiment
-        experiment = mlflow.get_experiment_by_name(experiment_name)
-        experiment_id = experiment.experiment_id
-        print(f"Using existing experiment ID: {experiment_id}")
-        return experiment_id
-    except Exception as e:
-        print(f"Error creating experiment: {e}")
-        raise
-    return experiment_id
-
 
 def main():
+    print("Starting model building process...")
     try:
         # Get root directory and resolve the path for params.yaml
-        root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
+        # root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
 
         # Load parameters from the root directory
-        params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
+        # params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
+        # Load parameters from the params.yaml in the root directory
+        params = dvc.api.params_show('params.yaml')['model_building']
+        print(f"Params: {params}")
         # model_params = load_json_params(os.path.join(root_dir, 'model_params.json'), logger=logger)
 
         # Load the preprocessed data from the interim directory
-        data = load_data(data_path=params['model_building']['data_path'], params=params)
+        data = load_data(data_path=params['data_path'], params=params)
         
-        cutoff_date = date(2024,6,1)
-        for d in data:
-            data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(14, "D")]
-        unique_dates, unique_weekdates, mondays_indexes = get_dates(data, params['model_building']['index_base'])
-        print(mondays_indexes)
-        splits_all = []
+        unique_dates, unique_weekdates = get_dates(data, params['index_base'])
+        cutoff_date = data[params['index_base']].index.date.min()+pd.Timedelta(21, "D")
 
-        experiment_name = f'xgb-dax-pipeline-runs-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+        experiment_name = f'{params["project_name"]}-v{params["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+        if params['evals_strategy']:
+            experiment_name += '-evals'
+        else:
+            experiment_name += '-trading'
         print(f"Experiment name: {experiment_name}")
-        tags = {
-            "project_name": "xgb-dax-pipeline",
-            "mlflow.note.content": "This is the experiment for the xgb-dax-pipeline",
-            "optimizer": "optuna",
-            "model_family": "xgboost",
-            "feature_set_version": 1,
-        }
 
-        experiment_id = create_mlflow_experiment(experiment_name=experiment_name, mlflow_tracking_uri="http://localhost:5000/", tags=tags)
+        experiment_id = create_mlflow_experiment(experiment_name=experiment_name, mlflow_tracking_uri=os.getenv('MLFLOW_TRACKING_URI'), tags={}, logger=logger)
         mlflow.set_experiment(experiment_id=experiment_id)
         # experiment = mlflow.get_experiment(experiment_id=experiment_id)
 
-        #     try:
-
-        with mlflow.start_run() as run:
-            mlflow.log_params(params['model_building'])
-            # mlflow.log_param('num_splits', num_splits)
-            mlflow.log_param('start_time', datetime.now())
-            mlflow.log_param('cutoff_date', cutoff_date)
-            # mlflow.log_param('end_time', datetime.now())
-            # mlflow.log_param('duration', datetime.now() - start_time)
-            # mlflow.log_param('_strategy', stats[0]['_strategy'])
-            # mlflow.log_metric('total_score', total_score)
-            # mlflow.log_metric('scores_std', scores_std)
-            # mlflow.log_metric('sharpe_mean', np.mean(sharpe))
-            # mlflow.log_metric('sortino_mean', np.mean(sortino))
-            # mlflow.log_metric('calmar_mean', np.mean(calmar))
-
-            study = optuna.create_study(direction='maximize')
-            study.optimize(lambda trial: objective(trial, data, params['model_building']['index_base'], params['model_building']['indexes_higher'], params['model_building']['timeframes'], params['model_building']['timeframe_scalers'], params['model_building']['list_X'], params['model_building']['col_y'], cutoff_date, unique_dates, mondays_indexes, splits_all, experiment_id), n_trials=params['model_building']['n_trials'])
-            print("Best trial number: ", study.best_trial.number)
-            print("Best parameters: ", study.best_params)
-            print("Best score:", study.best_value)
-            mlflow.log_param('num_splits', len(splits_all[study.best_trial.number]))
-
-            # run = mlflow.active_run()
-            mlflow.log_metric('best_trial_number', study.best_trial.number)
-            mlflow.log_dict(study.best_params, artifact_file="best_params.json")
-            mlflow.log_metric('best_score', study.best_value)
-
-            study_trials = study.trials_dataframe().sort_values(by=['value'], ascending=False)
-            study_trials.to_csv("study_trials.csv", index=False)
-            mlflow.log_artifact("study_trials.csv")
-            mlflow.log_param('end_time', datetime.now())
-            # mlflow.end_run(run_id=run.info.run_id)
-
-        # Save the trained model in the root directory
-        save_model(study.best_params, os.path.join(params['model_building']['models_path'], params['model_building']['model_params_name'].format(timeframe=params['model_building']['timeframe'], version=params['model_building']['version'])))
+        study = optuna.create_study(direction='maximize')
+        study.optimize(lambda trial: objective(trial, data, params, cutoff_date, unique_weekdates, experiment_id), n_trials=params['n_trials'])
+        print("Best trial number: ", study.best_trial.number)
+        print("Best parameters: ", study.best_params)
+        print("Best score:", study.best_value)
 
 
-            # except Exception as e:
-            #     logger.error(f"Failed to complete model building & evaluation: {e}")
-            #     print(f"Error: {e}")
+        print("Saving study trials to csv...")
+        optuna_trials_path = os.path.join(params['models_path'],f"{experiment_name}_trials.csv")
+        study_trials = study.trials_dataframe().sort_values(by=['value'], ascending=False)
+        print("Study trials: ", study_trials.head())
+        study_trials.to_csv(optuna_trials_path, index=False)
+        study_trials.to_csv(os.path.join(params['models_path'],"optuna_trials.csv"), index=False)
 
+        print(f"Searching for run_id with run name: Trial_{study.best_trial.number}")
+        # get run_id with run name 
+        run_object = mlflow.search_runs(filter_string=f"run_name = 'Trial_{study.best_trial.number}'")
+        run_id = run_object["run_id"][0]
+
+        with mlflow.start_run(run_id=run_id) as run:
+            mlflow.log_metric('best', True)
+
+        tags = {
+            "project_name": params['project_name'],
+            "stage": "building",
+            "mlflow.note.content": f"Project name: {params['project_name']}",
+            "optimizer": "optuna",
+            "model_family": params['model_type'],
+            "model_name": params['model_type'] + '_v' + str(params['version']),
+            "best_trial_number": study.best_trial.number,
+            "best_run_name": f"Trial_{study.best_trial.number}",
+            "best_run_id": run_id,
+        }
+        print("Setting tags for experiment: ", tags)
+        mlflow.set_experiment_tags(tags)
+
+        print(f"Searching for last run_id with run name: Trial_{len(study.trials)-1}")
+        # get run_id with run name 
+        run_object = mlflow.search_runs(filter_string=f"run_name = 'Trial_{len(study.trials)-1}'")
+        run_id = run_object["run_id"][0]
+        
+        with mlflow.start_run(run_id=run_id) as run:
+            mlflow.log_artifact(local_path=os.path.join(params['models_path'],"optuna_trials.csv"), artifact_path='optuna_trials')
 
     except Exception as e:
         logger.error('Failed to complete the feature engineering and model building process: %s', e)
         print(f"Error: {e}")
+    print("Model building process completed successfully.")
 
 
 if __name__ == '__main__':
     main()
-
