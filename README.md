@@ -3,111 +3,9 @@
 Alpha backtesting engine and data pipeline for multi timeframe, stock market prediction using XGBoost, SVM Regressor, SVM Classifier, LightGBM, extensible to other ML and Deep learning models, including RL.
 Can be deployed locally or on AWS (additional configuration required) via Lambda and Step Functions as part of an automated **MLOps** pipeline.
 
-Includes model serving application with API for served model management/load of new models.
-
-
-## Installation
-
-pip install -r requirements.txt
-
-
-## DVC
-
-dvc init
-
-dvc repro
-
-dvc dag
-
-
-
-
-### Json data demo in postman
-
-http://localhost:5000/predict
-
-```python
-{
-(...)
-}
-```
-
-
-
-
-
-# AWS-CICD-Deployment-with-Github-Actions
-
-## 1. Login to AWS console.
-
-## 2. Create IAM user for deployment
-
-	#with specific access
-
-	1. EC2 access : It is virtual machine
-
-	2. ECR: Elastic Container registry to save your docker image in aws
-
-
-	#Description: About the deployment
-
-	1. Build docker image of the source code
-
-	2. Push your docker image to ECR
-
-	3. Launch Your EC2 
-
-	4. Pull Your image from ECR in EC2
-
-	5. Lauch your docker image in EC2
-
-	#Policy:
-
-	1. AmazonEC2ContainerRegistryFullAccess
-
-	2. AmazonEC2FullAccess
-
-	
-## 3. Create ECR repo to store/save docker image
-    - Save the URI: ...
-
-	
-## 4. Create EC2 machine (Ubuntu) 
-
-## 5. Open EC2 and Install docker in EC2 Machine:
-	
-	
-	#optinal
-
-	sudo apt-get update -y
-
-	sudo apt-get upgrade
-	
-	#required
-
-	curl -fsSL https://get.docker.com -o get-docker.sh
-
-	sudo sh get-docker.sh
-
-	sudo usermod -aG docker ubuntu
-
-	newgrp docker
-	
-# 6. Configure EC2 as self-hosted runner:
-    setting>actions>runner>new self hosted runner> choose os> then run command one by one
-
-
-# 7. Setup github secrets:
-
-    AWS_ACCESS_KEY_ID=
-
-    AWS_SECRET_ACCESS_KEY=
-
-    AWS_REGION = us-east-1
-
-    AWS_ECR_LOGIN_URI =
-
-    ECR_REPOSITORY_NAME = algo-app
+Additional apps:
+- Model serving application with API for served model management/load of new models.
+- Trade agent integrated with Model serving application
 
 
 # Application architecture
@@ -342,3 +240,91 @@ Broker mapping for `DAX40`: `marketId` 17068, `quoteId` 6374. Kafka topic defaul
 | `QUESTDB_*` | Ingestion (pipeline and live) | — |
 | `MLFLOW_TRACKING_URI` | Pipeline and serving | `http://localhost:5000/` |
 | `REGISTERED_MODEL_NAME` / `MODEL_VERSION_ALIAS` | Serving | see `src/serving/.env.example` |
+
+
+
+# Installation
+
+pip install -r requirements.txt
+
+
+## DVC
+
+dvc init
+
+dvc repro
+
+dvc dag
+
+
+
+
+### Json data demo in postman
+
+http://localhost:5000/predict
+
+```python
+{
+(...)
+}
+```
+
+
+
+
+
+# AWS-CICD-Deployment-with-Github-Actions
+
+## 1. Login to AWS console.
+
+## 2. Create IAM user for deployment
+
+	#with specific access
+
+	1. EC2 access : It is virtual machine
+	2. ECR: Elastic Container registry to save your docker image in aws
+
+	#Description: About the deployment
+
+	1. Build docker image of the source code
+	2. Push your docker image to ECR
+	3. Launch Your EC2 
+	4. Pull Your image from ECR in EC2
+	5. Lauch your docker image in EC2
+
+	#Policy:
+
+	1. AmazonEC2ContainerRegistryFullAccess
+	2. AmazonEC2FullAccess
+
+	
+## 3. Create ECR repo to store/save docker image
+    - Save the URI: ...
+
+	
+## 4. Create EC2 machine (Ubuntu) 
+
+## 5. Open EC2 and Install docker in EC2 Machine:
+	
+	
+	#optinal
+	sudo apt-get update -y
+	sudo apt-get upgrade
+	#required
+	curl -fsSL https://get.docker.com -o get-docker.sh
+	sudo sh get-docker.sh
+	sudo usermod -aG docker ubuntu
+	newgrp docker
+	
+# 6. Configure EC2 as self-hosted runner:
+    setting>actions>runner>new self hosted runner> choose os> then run command one by one
+
+
+# 7. Setup github secrets:
+
+    AWS_ACCESS_KEY_ID=
+    AWS_SECRET_ACCESS_KEY=
+    AWS_REGION = us-east-1
+    AWS_ECR_LOGIN_URI =
+    ECR_REPOSITORY_NAME = algo-app
+
