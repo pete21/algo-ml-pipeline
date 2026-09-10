@@ -43,6 +43,9 @@ def main():
 
     # Load parameters from the root directory
     params = dvc.api.params_show('params.yaml')
+
+    preprocessing_data_path = params['data_preprocessing']['data_path']
+    preprocessing_file_name = params['data_preprocessing']['file_name']
     
     model_evaluation_params = params['model_evaluation']
     experiment_id = model_evaluation_params['experiment_id']
@@ -53,7 +56,10 @@ def main():
 
     # Load the preprocessed data from the interim directory
     data = load_data(data_path=model_building_params['data_path'], params=model_building_params)
-    
+
+    # Load the backtesting data from the ingestion directory
+    data[model_building_params['index_backtesting']] = pd.read_csv(os.path.join(preprocessing_data_path, model_building_params['ticker'], preprocessing_file_name.format(timeframe=model_building_params['timeframes'][model_building_params['index_backtesting']])), parse_dates=True, index_col='date')
+
     cutoff_date = data[model_building_params['index_base']].index.date.min()+pd.Timedelta(30, "D")
     for d in data:
         data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]

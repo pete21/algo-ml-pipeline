@@ -8,6 +8,7 @@ from typing import Any
 import mlflow
 import numpy as np
 import pandas as pd
+import pytz
 from joblib import dump
 
 from src.backtesting.strategies import (
@@ -273,6 +274,13 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         mlflow.log_param('indexes_higher', indexes_higher)
 
         tuples = []
+
+        # Backtesting data
+        local_timezone = pytz.timezone(params['local_timezone'])
+        data_backtesting = data[params['index_backtesting']].loc[:,['Open','High','Low','Close']]
+        data_backtesting['local_date'] = data_backtesting.index.tz_localize('UTC').tz_convert(local_timezone)
+        data_backtesting['minute_of_day'] = data_backtesting['local_date'].dt.hour * 60 + data_backtesting['local_date'].dt.minute
+
         for i in train_splits:
 
             train_split = unique_dates[i]
@@ -291,12 +299,16 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
             # y_test = y.loc[(X['local_date'].dt.date>train_split) & (X['local_date'].dt.date<=test_end_idx)]
             y_test = None
 
-            data_target = X_test.loc[:,['Open','High','Low','Close','minute_of_day']]
+            # data_target = X_test.loc[:,['Open','High','Low','Close','minute_of_day']]
+
+            data_target = data_backtesting.loc[(data_backtesting['local_date'].dt.date>train_split) & (data_backtesting['local_date'].dt.date<=test_end_idx),['Open','High','Low','Close','minute_of_day']]
+            # data_target = data_target.loc[:,['Open','High','Low','Close','minute_of_day']]
+
             data_target['sl']=model_params['sl']
             data_target['tp']=model_params['tp']
             
             # data_target['DaytradingExit'] = ((data_target.index.date != data_target.index.to_series().shift(periods=-1).dt.date) | (data_target.index.date != data_target.index.to_series().shift(periods=-2).dt.date))
-            data_target['DaytradingExit'] = (data_target['minute_of_day'] >= 21*60-15) & (data_target['minute_of_day'] <= 21*60)
+            data_target['DaytradingExit'] = (data_target['minute_of_day'] >= 21*60-10) & (data_target['minute_of_day'] <= 21*60)
 
             X_test = X_test.loc[(X_test['minute_of_day']>=model_params['hour_range_start']) & (X_test['minute_of_day']<model_params['hour_range_stop'])]
 

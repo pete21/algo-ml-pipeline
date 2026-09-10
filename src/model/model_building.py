@@ -166,12 +166,19 @@ def main():
         # Load parameters from the root directory
         # params = load_params(os.path.join(root_dir, 'params.yaml'), logger=logger)
         # Load parameters from the params.yaml in the root directory
-        params = dvc.api.params_show('params.yaml')['model_building']
+        params = dvc.api.params_show('params.yaml')
+        preprocessing_data_path = params['data_preprocessing']['data_path']
+        preprocessing_file_name = params['data_preprocessing']['file_name']
+        params = params['model_building']
+
         print(f"Params: {params}")
         # model_params = load_json_params(os.path.join(root_dir, 'model_params.json'), logger=logger)
 
         # Load the preprocessed data from the interim directory
         data = load_data(data_path=params['data_path'], params=params)
+
+        # Load the backtesting data from the ingestion directory
+        data[params['index_backtesting']] = pd.read_csv(os.path.join(preprocessing_data_path, params['ticker'], preprocessing_file_name.format(timeframe=params['timeframes'][params['index_backtesting']])), parse_dates=True, index_col='date')
         
         unique_dates, unique_weekdates = get_dates(data, params['index_base'])
         cutoff_date = data[params['index_base']].index.date.min()+pd.Timedelta(21, "D")

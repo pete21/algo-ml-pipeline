@@ -22,6 +22,7 @@ load_dotenv()
 
 TARGET_METRICS_DEFAULT = ('optimisation_score', 'total_profit')
 NUM_BEST_TRIALS = 10
+FIRST_TRIAL_NAME = 'Trial_0'
 
 # logging configuration
 logger = logging.getLogger('model_analysis')
@@ -204,7 +205,7 @@ def main():
     experiment_id = experiment.experiment_id
     print(f"Experiment ID: {experiment_id}")
     
-    model_params = load_model_params_from_experiment(experiment, logger=logger, run_name='Trial_0')
+    model_params = load_model_params_from_experiment(experiment, logger=logger, run_name=FIRST_TRIAL_NAME)
     print(f"Loaded model param keys: {model_params.keys()}")
 
     positive_value_run_params = search_positive_value_runs(experiment, num_runs=NUM_BEST_TRIALS)

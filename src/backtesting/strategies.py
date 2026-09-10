@@ -355,7 +355,8 @@ def do_backtest_Strategy_xgb_classification(X_train, y_train, X_test, y_test, da
     y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
-    data_target = data_target.join(y_series, how='left')
+    # data_target = data_target.join(y_series, how='left')
+    data_target = merge_pred_to_data_target(data_target, y_series, 4)
 
     print("Backtesting...")
     # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
@@ -423,7 +424,8 @@ def do_backtest_Strategy_xgb_regression(X_train, y_train, X_test, y_test, data_t
     y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
-    data_target = data_target.join(y_series, how='left')
+    # data_target = data_target.join(y_series, how='left')
+    data_target = merge_pred_to_data_target(data_target, y_series, 4)
 
     print("Backtesting...")
     # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
@@ -465,7 +467,9 @@ def do_backtest_Strategy_linear_regression(X_train, y_train, X_test, y_test, dat
 
     y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
-    data_target = data_target.join(y_series, how='left')
+    # print("Joining y_series to data_target...")
+    # data_target = data_target.join(y_series, how='left')
+    data_target = merge_pred_to_data_target(data_target, y_series, 4)
 
     print("Backtesting...")
 
@@ -507,7 +511,9 @@ def do_backtest_Strategy_logistic_regression(X_train, y_train, X_test, y_test, d
 
     y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
-    data_target = data_target.join(y_series, how='left')
+    # print("Joining y_series to data_target...")
+    # data_target = data_target.join(y_series, how='left')
+    data_target = merge_pred_to_data_target(data_target, y_series, 4)
 
     print("Backtesting...")
 
@@ -548,7 +554,9 @@ def do_backtest_Strategy_ridge_regression(X_train, y_train, X_test, y_test, data
 
     y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
-    data_target = data_target.join(y_series, how='left')
+    # print("Joining y_series to data_target...")
+    # data_target = data_target.join(y_series, how='left')
+    data_target = merge_pred_to_data_target(data_target, y_series, 4)
 
     print("Backtesting...")
 
@@ -584,7 +592,9 @@ def do_backtest_Strategy_lasso_regression(X_train, y_train, X_test, y_test, data
 
     y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
-    data_target = data_target.join(y_series, how='left')
+    # print("Joining y_series to data_target...")
+    # data_target = data_target.join(y_series, how='left')
+    data_target = merge_pred_to_data_target(data_target, y_series, 4)
 
     print("Backtesting...")
 
@@ -626,7 +636,9 @@ def do_backtest_Strategy_elasticnet_regression(X_train, y_train, X_test, y_test,
 
     y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
-    data_target = data_target.join(y_series, how='left')
+    # print("Joining y_series to data_target...")
+    # data_target = data_target.join(y_series, how='left')
+    data_target = merge_pred_to_data_target(data_target, y_series, 4)
 
     print("Backtesting...")
 
@@ -669,7 +681,9 @@ def do_backtest_Strategy_svr_regression(X_train, y_train, X_test, y_test, data_t
 
     y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
-    data_target = data_target.join(y_series, how='left')
+    # print("Joining y_series to data_target...")
+    # data_target = data_target.join(y_series, how='left')
+    data_target = merge_pred_to_data_target(data_target, y_series, 4)
 
     print("Backtesting...")
 
@@ -711,7 +725,9 @@ def do_backtest_Strategy_svc_classification(X_train, y_train, X_test, y_test, da
 
     y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
 
-    data_target = data_target.join(y_series, how='left')
+    # print("Joining y_series to data_target...")
+    # data_target = data_target.join(y_series, how='left')
+    data_target = merge_pred_to_data_target(data_target, y_series, 4)
 
     print("Backtesting...")
 
@@ -728,3 +744,9 @@ def do_backtest_Strategy_svc_classification(X_train, y_train, X_test, y_test, da
     stats = bt.run()
 
     return y_series, stats
+
+
+def merge_pred_to_data_target(data_target: pd.DataFrame, y_series: pd.Series, shift_period: int) -> pd.DataFrame:
+    data_target = data_target.join(y_series, how='left')
+    data_target['y_pred'] = data_target['y_pred'].shift(shift_period).fillna(0)                     # fillna(0) to avoid NaN values - optional
+    return data_target

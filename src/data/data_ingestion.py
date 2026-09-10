@@ -99,6 +99,9 @@ def preprocess_data(data: dict, params: dict, logger: logging.Logger) -> dict:
         data[params['index_base']] = data[params['index_base']].iloc[:,0:7]
         print(data[params['index_base']].head())
 
+        data[params['index_barrier']] = data[params['index_barrier']].iloc[:,0:4]                                       # Open, High, Low, Close
+        print(data[params['index_barrier']].head())
+
         return data
     except Exception as e:
         logger.error('Unexpected error occurred while preprocessing the data: %s', e)
@@ -112,9 +115,9 @@ def save_data(data: dict, params: dict, logger: logging.Logger) -> None:
         # Create the data/raw directory if it does not exist
         os.makedirs(f"{params['data_path_dest']}/{params['ticker']}", exist_ok=True)
 
-        for i in [params['index_base']] + params['indexes_higher']:
+        for i in [params['index_barrier']] + [params['index_base']] + params['indexes_higher']:
             print(f'Timeframe: {params['timeframes'][i]}')
-            data[i].to_csv(os.path.join(f"{params['data_path_dest']}/{params['ticker']}", 'data_ohlc_{timeframe}.csv'.format(timeframe=params['timeframes'][i])), index=True)
+            data[i].to_csv(os.path.join(f"{params['data_path_dest']}/{params['ticker']}", 'data_ohlc_{timeframe}.csv'.format(timeframe=params['timeframes'][i])), index=True, float_format='%.8g')
         
         logger.debug('Train and test data saved to %s', f"{params['data_path_dest']}/{params['ticker']}")
     except Exception as e:
