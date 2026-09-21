@@ -5,7 +5,7 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 
-PREDICT_URL = os.getenv("MODEL_PREDICT_URL", "http://localhost:8100/predict")
+MODEL_PREDICT_URL = os.getenv("MODEL_PREDICT_URL", "http://localhost:8100/predict")
 MODEL_PARAMS_URL = os.getenv("MODEL_PARAMS_URL", "http://localhost:8100/model/params")
 MODEL_INFO_URL = os.getenv("MODEL_INFO_URL", "http://localhost:8100/")
 
@@ -21,7 +21,7 @@ def request_predictions(X: pd.DataFrame, n_rows: int, logger: logging.Logger) ->
     }
     try:
         response = requests.post(
-            PREDICT_URL,
+            MODEL_PREDICT_URL,
             json=payload
         )
         return response.json()

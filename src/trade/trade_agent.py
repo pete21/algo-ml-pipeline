@@ -37,7 +37,7 @@ SCHEDULE_OFFSET_SECONDS = 5
 
 CANCEL_PENDING_ORDER_OLDER_THAN_MINUTES = INTERVAL_MINUTES+1 # maximum lifetime of a pending order, then it is is cancelled by the trade agent
 
-TICKER = 'DAX40'
+TICKER = os.getenv('TICKER', 'DAX40')  # DAX40, NQ100, SP500
 
 ORDER_MODE_MARKET = 0
 ORDER_MODE_LIMIT = 1
