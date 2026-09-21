@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import dvc.api
 import pandas as pd
@@ -79,7 +79,7 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         params['timeframe_scalers'],
         params['list_X'],
         'target',
-        date.today()-pd.Timedelta(30, "d"),
+        date.today() - timedelta(days=30),
         params['lags'],
         col_open="Open", col_high="High", col_low="Low", col_close="Close"
         )

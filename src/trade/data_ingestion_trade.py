@@ -1,9 +1,8 @@
-from datetime import datetime
 import logging
 import os
+from datetime import datetime, timedelta
 
 import dvc.api
-from matplotlib.dates import relativedelta
 import pandas as pd
 import pytz
 from dotenv import load_dotenv
@@ -41,7 +40,7 @@ SELECT timestamp, open, high, low, close FROM %(tickstream_table_1m)s where time
 def load_data_from_questdb(params: dict, connection: Connection, logger: logging.Logger) -> dict:
     """Load data from QuestDB."""
 
-    start_date = datetime.now() - relativedelta(months=1)
+    start_date = datetime.now() - timedelta(days=45)
     try:
         data = {}
         for i in params['indexes_higher'] + [params['index_base']]:

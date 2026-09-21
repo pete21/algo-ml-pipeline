@@ -9,7 +9,11 @@ from feature_engine.timeseries.forecasting import LagFeatures
 from yaml import YAMLError, safe_load
 
 from src.data_utils.dynamic_features import dynamic_features
-from src.data_utils.features import calc_kernel_pca, sarima_features, sarima_features_rolling_1_step
+from src.data_utils.features import (
+    calc_kernel_pca,
+    sarima_features,
+    sarima_features_rolling_1_step,
+)
 
 
 def load_params(params_path: str, logger: logging.Logger) -> dict:
@@ -59,7 +63,7 @@ def get_dates(data: dict, index: int) -> tuple[list, list]:
 
 
 def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, timeframes: list, scalers: dict, X_cols: list, y_col: str, cutoff_date: date, lags: list, col_open="Open", col_high="High", col_low="Low", col_close="Close") -> tuple[pd.DataFrame, pd.DataFrame, list]:
-    cutoff_date_2 = cutoff_date - pd.Timedelta(14, "D")
+    cutoff_date_2 = cutoff_date - pd.Timedelta(7, "D")
 
     X_cols_with_open_high_low_close = list(dict.fromkeys(X_cols + [col_open, col_high, col_low, col_close]))                # Open, High, Low, Close are included in the X_cols_with_open_high_low_close list to avoid duplicate columns in the lag transform
 
