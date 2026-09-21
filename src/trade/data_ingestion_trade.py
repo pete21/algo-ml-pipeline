@@ -1,7 +1,9 @@
+from datetime import datetime
 import logging
 import os
 
 import dvc.api
+from matplotlib.dates import relativedelta
 import pandas as pd
 import pytz
 from dotenv import load_dotenv
@@ -16,9 +18,13 @@ TICKERS = {
 }
 
 load_dotenv()
-questdb_url = os.getenv('QUESTDB_URL')
-questdb_user = os.getenv('QUESTDB_USER')
-questdb_password = os.getenv('QUESTDB_PASSWORD')
+questdb_url = os.getenv('QUESTDB_URL_TRADE')
+questdb_user = os.getenv('QUESTDB_RO_USER')
+questdb_password = os.getenv('QUESTDB_RO_PASSWORD')
+
+print(f"QUESTDB_URL_TRADE: {questdb_url}")
+print(f"QUESTDB_RO_USER: {questdb_user}")
+print(f"QUESTDB_RO_PASSWORD: {questdb_password}")
 
 
 QUERY_TEMPLATE = """SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s where timestamp>=%(start_date)s
@@ -34,6 +40,8 @@ SELECT timestamp, open, high, low, close FROM %(tickstream_table_1m)s where time
 
 def load_data_from_questdb(params: dict, connection: Connection, logger: logging.Logger) -> dict:
     """Load data from QuestDB."""
+
+    start_date = datetime.now() - relativedelta(months=1)
     try:
         data = {}
         for i in params['indexes_higher'] + [params['index_base']]:
@@ -43,7 +51,7 @@ def load_data_from_questdb(params: dict, connection: Connection, logger: logging
                 "table_1m" : params['table_name'].format(ticker=TICKERS[params['ticker']], timeframe='1M'),
                 "tickstream_table_1m" : params['tickstream_table_name'].format(ticker=TICKERS[params['ticker']], timeframe='1M'),
                 "gaps_table_1m" : params['gaps_table_name'].format(ticker=TICKERS[params['ticker']], timeframe='1M'),
-                "start_date" : params['start_date'],
+                "start_date" : start_date.strftime('%Y-%m-%d'),
             }
             # print(f"Query: {query % query_params}")
             data[i] = pd.read_sql_query(query, con=connection, params=query_params, index_col='date', parse_dates=['date'])

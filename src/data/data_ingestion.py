@@ -18,8 +18,8 @@ TICKERS = {
 
 load_dotenv()
 questdb_url = os.getenv('QUESTDB_URL')
-questdb_user = os.getenv('QUESTDB_USER')
-questdb_password = os.getenv('QUESTDB_PASSWORD')
+questdb_user = os.getenv('QUESTDB_RO_USER')
+questdb_password = os.getenv('QUESTDB_RO_PASSWORD')
 
 
 QUERY_TEMPLATE = """SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s where timestamp>=%(start_date)s and timestamp<=%(end_date)s"""

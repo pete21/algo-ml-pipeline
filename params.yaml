@@ -241,8 +241,7 @@ model_trade:
   table_name: 'DUKASCOPY_{ticker}_OHLC_{timeframe}'
   tickstream_table_name: 'TICKSTREAM_{ticker}_OHLC_{timeframe}'
   gaps_table_name: 'GAPS_{ticker}_OHLC_{timeframe}'
-  ticker: 'DAX40'
-  start_date: '2026-05-01'
+  ticker: 'DAX40' # 'DAX40' # 'SP500' # 'NQ100'
   local_timezone: 'Europe/Berlin'
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
@@ -286,6 +285,7 @@ model_trade:
     'sma_cross',
     #'log_ret_1',
     'lowerband_r',
+    'upperband_r',
     #'down_displacement_low',
     #'down_displacement_high',
     #'bullish_gap_size',
@@ -297,7 +297,7 @@ model_trade:
     'stochk_slope',
     #'dc_market_regime_ema',
     #'dc_market_regime_wma',
-    'dc_market_regime_ema_log',
+    'dc_market_regime_ema_log',     # to be confirmed, or ema, or wma
     'ha_slope_2',
     'ema_cross',
     'log_ret_ha_1',
@@ -308,7 +308,7 @@ model_trade:
     # 'log_ret_2',
     'ppo',
     'ppo_slope',
-    'upperband_r',
+
     'sar_r',
     #'ha_slope_15',
     'stochd',

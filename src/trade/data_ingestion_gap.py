@@ -22,12 +22,12 @@ TICKERS = {
 }
 
 load_dotenv()
-questdb_url = os.getenv('QUESTDB_URL')
+questdb_url = os.getenv('QUESTDB_URL_TRADE')
 questdb_user = os.getenv('QUESTDB_USER')
 questdb_password = os.getenv('QUESTDB_PASSWORD')
 
 
-def load_data_from_url(params: dict, logger: logging.Logger) -> dict:
+def load_data_from_url(params: dict, logger: logging.Logger) -> pd.DataFrame:
     """Load data from URL"""
     try:
         fetch_url=FETCH_URLS[params['model_trade']['ticker']]
@@ -89,15 +89,17 @@ def main(logger: logging.Logger):
         engine = create_engine(questdb_url, connect_args={
             'user': questdb_user, 'password': questdb_password,
             "connect_timeout": 5,          # 5 seconds to connect
-            "options": "-c statement_timeout=10000"  # 10 seconds execution limit
+            "options": "-c statement_timeout=30000"  # 30 seconds execution limit
         })
 
-        data = load_data_from_url(params, logger)
-        print(data.head())
-        data.to_csv('gaps_data_1m.csv')
-
         with engine.connect() as connection:
-            save_data(data, connection, params, logger)
+
+            for ticker in TICKERS:
+                params['model_trade']['ticker'] = ticker
+                data: pd.DataFrame = load_data_from_url(params, logger)
+                print(data.head())
+                # data.to_csv('gaps_data_1m.csv')
+                save_data(data, connection, params, logger)
         engine.dispose()
 
     except Exception as e:
