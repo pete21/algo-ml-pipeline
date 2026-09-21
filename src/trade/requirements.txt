@@ -4,9 +4,6 @@ pandas
 PyYAML
 numba
 scipy
-xgboost
-lightgbm
-scikit-learn==1.9.0
 python-dotenv
 psycopg2-binary
 sqlalchemy
