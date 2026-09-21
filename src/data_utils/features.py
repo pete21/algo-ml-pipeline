@@ -527,8 +527,8 @@ def kama_market_regime(df, col="Close", l1_fast=50, l2_fast=2, l3_fast=30, l1_sl
     kama_diff_pct = (kama_fast - kama_slow)/kama_slow * 100
 
     #    kama_trend = np.sign(kama_diff)
-    kama_trend_slow = talib.LINEARREG_ANGLE(kama_slow, kama_trend_period)/10
-    kama_trend_fast = talib.LINEARREG_ANGLE(kama_fast, kama_trend_period)/10
+    kama_trend_slow = talib.LINEARREG_SLOPE(kama_slow, kama_trend_period)/df['ha_close']*100
+    kama_trend_fast = talib.LINEARREG_SLOPE(kama_fast, kama_trend_period)/df['ha_close']*100
 
     return kama_fast, kama_slow, kama_diff_pct, kama_trend_slow, kama_trend_fast
 
@@ -578,11 +578,11 @@ def displacement_detection(df, type_range="standard", strength=3, period=100):
     #    df["high_displacement"] = np.nan
     #     df["low_displacement"] = np.nan
 
-    up_displacement_high = np.where(displacement == 1, df['High'], 0)
-    up_displacement_low = np.where(displacement == 1, df['Low'], 0)
+    up_displacement_high = np.where(displacement == 1, df['High'], 0)/df['ha_close']*100
+    up_displacement_low = np.where(displacement == 1, df['Low'], 0)/df['ha_close']*100
     
-    down_displacement_low  = np.where(displacement == -1, df['Low'], 0)
-    down_displacement_high  = np.where(displacement == -1, df['High'], 0)
+    down_displacement_low  = np.where(displacement == -1, df['Low'], 0)/df['ha_close']*100
+    down_displacement_high  = np.where(displacement == -1, df['High'], 0)/df['ha_close']*100
 
 
     return candle_range, candle_range_std, displacement, up_displacement_high, up_displacement_low, down_displacement_high, down_displacement_low
@@ -611,12 +611,12 @@ def gap_detection(df, lookback=2):
     """
 
     bullish_gap = np.where(df['High'].shift(lookback) < df['Low'], 1, 0)
-    bullish_gap_high = np.where(bullish_gap==1, df['Low'], 0)
-    bullish_gap_low = np.where(bullish_gap==1, df['High'].shift(lookback), 0)
+    bullish_gap_high = np.where(bullish_gap==1, df['Low'], 0)/df['ha_close']*100
+    bullish_gap_low = np.where(bullish_gap==1, df['High'].shift(lookback), 0)/df['ha_close']*100
 
     bearish_gap = np.where(df['High'] < df['Low'].shift(lookback), -1, 0)
-    bearish_gap_high = np.where(bearish_gap==-1, df['Low'].shift(lookback), 0)
-    bearish_gap_low = np.where(bearish_gap==-1, df['High'], 0)
+    bearish_gap_high = np.where(bearish_gap==-1, df['Low'].shift(lookback), 0)/df['ha_close']*100
+    bearish_gap_low = np.where(bearish_gap==-1, df['High'], 0)/df['ha_close']*100
 
     bullish_gap_size = bullish_gap_high-bullish_gap_low
     bearish_gap_size = bearish_gap_high-bearish_gap_low
@@ -1077,9 +1077,9 @@ def market_regime_features(df, col_close="Close", col_high="High", col_low="Low"
                 2 * talib.WMA(df["bullish_gap"]+df["bearish_gap"], gap_hull_period // 2) - talib.WMA(df["bullish_gap"]+df["bearish_gap"], gap_hull_period),
                 round(np.sqrt(gap_hull_period)),
     )
-    df['gap_hull_slope'] = talib.LINEARREG_ANGLE(df['gap_hull'], gap_hull_slope_period)/10
+    df['gap_hull_slope'] = talib.LINEARREG_SLOPE(df['gap_hull'], gap_hull_slope_period)*10
 #    df['gap_ema'] = talib.EMA(df.loc[:,"bullish_gap"]+df.loc[:,"bearish_gap"], gap_ema_period)*2
-#    df['gap_ema_slope'] = talib.LINEARREG_ANGLE(df['gap_hull'], gap_ema_slope_period)
+#    df['gap_ema_slope'] = talib.LINEARREG_SLOPE(df['gap_hull'], gap_ema_slope_period)
 #
 
     
@@ -1089,27 +1089,27 @@ def market_regime_features(df, col_close="Close", col_high="High", col_low="Low"
 # Replacement with hull
     df['displacement_hull'] = talib.WMA(
                 2 * talib.WMA(df["displacement"], displacement_hull_period // 2) - talib.WMA(df["displacement"], displacement_hull_period),
-                int(round(np.sqrt(displacement_hull_period)))
+                round(np.sqrt(displacement_hull_period))
     )
-    df['displacement_hull_slope'] = talib.LINEARREG_ANGLE(df['displacement_hull'], displacement_hull_slope_period)
+    df['displacement_hull_slope'] = talib.LINEARREG_SLOPE(df['displacement_hull'], displacement_hull_slope_period)*10
 #
 #    df['displacement_ema'] = talib.EMA(df.loc[:,"displacement"], displacement_ema_period)*2
 #    df['displacement_sma'] = talib.SMA(df.loc[:,"displacement"], displacement_sma_period)*4
-#    df['displacement_hull_slope'] = talib.LINEARREG_ANGLE(df['displacement_ema']+df['displacement_sma'], displacement_hull_slope_period)
+#    df['displacement_hull_slope'] = talib.LINEARREG_SLOPE(df['displacement_ema']+df['displacement_sma'], displacement_hull_slope_period)
 
     
 # Replacement with hull
     df['ema_ha_candle_fill'] = talib.WMA(
                 2 * talib.WMA(df["ha_candle_fill"], ha_candle_period // 2) - talib.WMA(df["ha_candle_fill"], ha_candle_period),
-                int(round(np.sqrt(ha_candle_period))),
+                round(np.sqrt(ha_candle_period)),
     )
     df['ema_ha_wickstrength'] = talib.WMA(
                 2 * talib.WMA(df["ha_wickstrength"], ha_candle_period // 2) - talib.WMA(df["ha_wickstrength"], ha_candle_period),
-                int(round(np.sqrt(ha_candle_period))),
+                round(np.sqrt(ha_candle_period)),
     )
     df['ema_ha_sign'] = talib.WMA(
                 2 * talib.WMA(df["ha_sign"], ha_sign_ma_period // 2) - talib.WMA(df["ha_sign"], ha_sign_ma_period),
-                int(round(np.sqrt(ha_sign_ma_period))),
+                round(np.sqrt(ha_sign_ma_period)),
     )
 
     # Compute the percentage of closing prices in different range zones
@@ -1288,7 +1288,7 @@ def moderi(dataframe: DataFrame, len_slow_ma: int = 32) -> Series:
 # zlema
 
 def zlema(dataframe, timeperiod):
-    lag = int(math.floor((timeperiod - 1) / 2))
+    lag = (timeperiod - 1) // 2
     if isinstance(dataframe, Series):
         ema_data = dataframe + (dataframe - dataframe.shift(lag))
     else:
@@ -1299,14 +1299,14 @@ def zlema(dataframe, timeperiod):
 # zlhull
 
 def zlhull(dataframe, timeperiod):
-    lag = int(math.floor((timeperiod - 1) / 2))
+    lag = (timeperiod - 1) // 2
     if isinstance(dataframe, Series):
         wma_data = dataframe + (dataframe - dataframe.shift(lag))
     else:
         wma_data = 2*dataframe["close"] - dataframe["close"].shift(lag)
     return talib.WMA(
-        2 * talib.WMA(wma_data, int(math.floor(timeperiod / 2))) - talib.WMA(wma_data, timeperiod),
-        int(round(np.sqrt(timeperiod))),
+        2 * talib.WMA(wma_data, timeperiod // 2) - talib.WMA(wma_data, timeperiod),
+        round(np.sqrt(timeperiod)),
     )
 
 
@@ -1315,14 +1315,14 @@ def zlhull(dataframe, timeperiod):
 def hull(dataframe, timeperiod):
     if isinstance(dataframe, Series):
         return talib.WMA(
-            2 * talib.WMA(dataframe, int(math.floor(timeperiod / 2))) - talib.WMA(dataframe, timeperiod),
-            int(round(np.sqrt(timeperiod))),
+            2 * talib.WMA(dataframe, timeperiod // 2) - talib.WMA(dataframe, timeperiod),
+            round(np.sqrt(timeperiod)),
         )
     else:
         return talib.WMA(
-            2 * talib.WMA(dataframe["close"], int(math.floor(timeperiod / 2)))
+            2 * talib.WMA(dataframe["close"], timeperiod // 2)
             - talib.WMA(dataframe["close"], timeperiod),
-            int(round(np.sqrt(timeperiod))),
+            round(np.sqrt(timeperiod)),
         )
 
 

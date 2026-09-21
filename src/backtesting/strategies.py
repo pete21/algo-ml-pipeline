@@ -5,6 +5,8 @@ from random import randint
 import numpy as np
 import pandas as pd
 from scipy.special import softmax
+from sklearn import set_config
+from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import (
     ElasticNet,
     Lasso,
@@ -12,7 +14,8 @@ from sklearn.linear_model import (
     LogisticRegression,
     Ridge,
 )
-from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import RobustScaler, StandardScaler
 from sklearn.svm import SVC, SVR
 from sklearn.utils.class_weight import compute_sample_weight
 from xgboost import DMatrix, train
@@ -236,15 +239,15 @@ def viterbi_price_decoder(emission_probs, penalty=1.0):
 
 ######################################################## STRATEGIES ########################################################
 
-def do_backtest_Strategy_xgb_classification(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
+def do_backtest_Strategy_xgb_classification(X_train, y_train, X_test, y_test, data_target, model_params, params):
     rand_int = randint(1000000, 2000000)
     params_gpu = {
         'num_class': 3, 'device': 'gpu',
-        'learning_rate': params['learning_rate'],
-        # 'n_estimators': params['n_estimators'],
-        'max_depth': params['max_depth'],
-        'subsample': params['subsample'],
-        'gamma': params['gamma'],
+        'learning_rate': model_params['learning_rate'],
+        # 'n_estimators': model_params['n_estimators'],
+        'max_depth': model_params['max_depth'],
+        'subsample': model_params['subsample'],
+        'gamma': model_params['gamma'],
         'objective': 'multi:softprob', # 'reg:squarederror',
         'seed': rand_int,
         'eval_metric': ['mlogloss', 'merror'],
@@ -275,7 +278,7 @@ def do_backtest_Strategy_xgb_classification(X_train, y_train, X_test, y_test, da
     # print("weighting: ")
 
     print("Training model...")
-    model_gpu = train(params_gpu, dtrain_gpu, num_boost_round=params['n_estimators'],
+    model_gpu = train(params_gpu, dtrain_gpu, num_boost_round=model_params['n_estimators'],
         # obj=custom_distance_softmax, #distance_weighted_loss,
         # custom_metric=tracking_metric,  # Handles tracking
         # evals=watchlist,
@@ -351,8 +354,8 @@ def do_backtest_Strategy_xgb_classification(X_train, y_train, X_test, y_test, da
 
     # print("y_pred_expected: ", y_pred_expected)
     # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
-    # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=params['pred_avg_period'], min_periods=1).mean()
-    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+    # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=model_params['pred_avg_period'], min_periods=1).mean()
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
     # data_target = data_target.join(y_series, how='left')
@@ -362,7 +365,7 @@ def do_backtest_Strategy_xgb_classification(X_train, y_train, X_test, y_test, da
     # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
 
     bt = Backtest(data_target,
-        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
+        Daytrading_strategy if not params['evals_strategy'] else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -377,15 +380,15 @@ def do_backtest_Strategy_xgb_classification(X_train, y_train, X_test, y_test, da
 
 
 
-def do_backtest_Strategy_xgb_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
+def do_backtest_Strategy_xgb_regression(X_train, y_train, X_test, y_test, data_target, model_params, params):
     rand_int = randint(1000000, 2000000)
     params_gpu = {
         'device': 'gpu',
-        'learning_rate': params['learning_rate'],
-        # 'n_estimators': params['n_estimators'],
-        'max_depth': params['max_depth'],
-        'subsample': params['subsample'],
-        'gamma': params['gamma'],
+        'learning_rate': model_params['learning_rate'],
+        # 'n_estimators': model_params['n_estimators'],
+        'max_depth': model_params['max_depth'],
+        'subsample': model_params['subsample'],
+        'gamma': model_params['gamma'],
         'objective': 'reg:squarederror',
         'eval_metric': ['rmse', 'mae'],
         'tree_method': 'hist',
@@ -407,7 +410,7 @@ def do_backtest_Strategy_xgb_regression(X_train, y_train, X_test, y_test, data_t
     print("Training model...")
     # model_gpu = XGBRegressor(**params_gpu)
     # model_gpu.fit(X_train, y_train, sample_weight=sample_weights)
-    model_gpu = train(params_gpu, dtrain_gpu, num_boost_round=params['n_estimators'],)
+    model_gpu = train(params_gpu, dtrain_gpu, num_boost_round=model_params['n_estimators'],)
     
     if X_test is None:
         return model_gpu, None
@@ -421,7 +424,7 @@ def do_backtest_Strategy_xgb_regression(X_train, y_train, X_test, y_test, data_t
     hist, bins = np.histogram(y_pred)
     print("y_pred distribution: ", hist, bins)
 
-    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
     # data_target = data_target.join(y_series, how='left')
@@ -431,7 +434,7 @@ def do_backtest_Strategy_xgb_regression(X_train, y_train, X_test, y_test, data_t
     # data_target.to_csv(f'data_target_optim_{rand_int}.csv')
 
     bt = Backtest(data_target,
-        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
+        Daytrading_strategy if not params['evals_strategy'] else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -444,7 +447,7 @@ def do_backtest_Strategy_xgb_regression(X_train, y_train, X_test, y_test, data_t
 
     return y_series, stats #, model_gpu
 
-def do_backtest_Strategy_linear_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
+def do_backtest_Strategy_linear_regression(X_train, y_train, X_test, y_test, data_target, model_params, params):
     print("Linear Regression...")
     # Scale data
     scaler = StandardScaler()
@@ -465,7 +468,7 @@ def do_backtest_Strategy_linear_regression(X_train, y_train, X_test, y_test, dat
     hist, bins = np.histogram(y_pred)
     print("y_pred distribution: ", hist, bins)
 
-    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
     # data_target = data_target.join(y_series, how='left')
@@ -474,7 +477,7 @@ def do_backtest_Strategy_linear_regression(X_train, y_train, X_test, y_test, dat
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
+        Daytrading_strategy if not params['evals_strategy'] else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -487,7 +490,7 @@ def do_backtest_Strategy_linear_regression(X_train, y_train, X_test, y_test, dat
 
     return y_series, stats
 
-def do_backtest_Strategy_logistic_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
+def do_backtest_Strategy_logistic_regression(X_train, y_train, X_test, y_test, data_target, model_params, params):
     print("Logistic Regression...")
     # Scale data
     # scaler = StandardScaler()
@@ -509,7 +512,7 @@ def do_backtest_Strategy_logistic_regression(X_train, y_train, X_test, y_test, d
     hist, bins = np.histogram(y_pred)
     print("y_pred distribution: ", hist, bins)
 
-    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
     # data_target = data_target.join(y_series, how='left')
@@ -518,7 +521,7 @@ def do_backtest_Strategy_logistic_regression(X_train, y_train, X_test, y_test, d
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
+        Daytrading_strategy if not params['evals_strategy'] else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -531,7 +534,7 @@ def do_backtest_Strategy_logistic_regression(X_train, y_train, X_test, y_test, d
 
     return y_series, stats
 
-def do_backtest_Strategy_ridge_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
+def do_backtest_Strategy_ridge_regression(X_train, y_train, X_test, y_test, data_target, model_params, params):
     print("Ridge Regression...")
     # Scale data
     scaler = StandardScaler()
@@ -552,7 +555,7 @@ def do_backtest_Strategy_ridge_regression(X_train, y_train, X_test, y_test, data
     hist, bins = np.histogram(y_pred)
     print("y_pred distribution: ", hist, bins)
 
-    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
     # data_target = data_target.join(y_series, how='left')
@@ -561,7 +564,7 @@ def do_backtest_Strategy_ridge_regression(X_train, y_train, X_test, y_test, data
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
+        Daytrading_strategy if not params['evals_strategy'] else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -574,7 +577,7 @@ def do_backtest_Strategy_ridge_regression(X_train, y_train, X_test, y_test, data
 
     return y_series, stats
 
-def do_backtest_Strategy_lasso_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
+def do_backtest_Strategy_lasso_regression(X_train, y_train, X_test, y_test, data_target, model_params, params):
     print("Lasso Regression...")
     rand_int = randint(1000000, 2000000)
     model_lasso = Lasso(alpha=1, max_iter=1000, random_state=rand_int)
@@ -590,7 +593,7 @@ def do_backtest_Strategy_lasso_regression(X_train, y_train, X_test, y_test, data
     hist, bins = np.histogram(y_pred)
     print("y_pred distribution: ", hist, bins)
 
-    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
     # data_target = data_target.join(y_series, how='left')
@@ -599,7 +602,7 @@ def do_backtest_Strategy_lasso_regression(X_train, y_train, X_test, y_test, data
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
+        Daytrading_strategy if not params['evals_strategy'] else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -613,7 +616,7 @@ def do_backtest_Strategy_lasso_regression(X_train, y_train, X_test, y_test, data
     return y_series, stats
 
 
-def do_backtest_Strategy_elasticnet_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
+def do_backtest_Strategy_elasticnet_regression(X_train, y_train, X_test, y_test, data_target, model_params, params):
 
     # Scale data
     scaler = StandardScaler()
@@ -634,7 +637,7 @@ def do_backtest_Strategy_elasticnet_regression(X_train, y_train, X_test, y_test,
     hist, bins = np.histogram(y_pred)
     print("y_pred distribution: ", hist, bins)
 
-    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
     # data_target = data_target.join(y_series, how='left')
@@ -643,7 +646,7 @@ def do_backtest_Strategy_elasticnet_regression(X_train, y_train, X_test, y_test,
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
+        Daytrading_strategy if not params['evals_strategy'] else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -657,29 +660,76 @@ def do_backtest_Strategy_elasticnet_regression(X_train, y_train, X_test, y_test,
     return y_series, stats
 
 
-def do_backtest_Strategy_svr_regression(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
+def do_backtest_Strategy_svr_regression(X_train, y_train, X_test, y_test, data_target, model_params, params):
 
-    # Scale data
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
+    print("SVR Regression...")
+    # print("X_train columns: ", X_train.columns)
+    # print(X_train.head())
+    # rand_int = randint(1000000, 2000000)
+    # X_train.to_csv(f'X_train_{rand_int}.csv')
 
-    model_svr = SVR(kernel='rbf', C=params['C'], epsilon=params['epsilon'], gamma='scale', cache_size=1000, shrinking=False)
-    model_svr.fit(X_train_scaled, y_train)
+    robust_features = [feature for feature in X_train.columns if any(feature.startswith(prefix) for prefix in params['robust_prefixes'])]
+    standard_features = [feature for feature in X_train.columns if any(feature.startswith(prefix) for prefix in params['standard_prefixes'])]
+
+    # bounded_prefixes = ('rsi')
+    # bounded_features = X_train.columns[X_train.columns.str.startswith(bounded_prefixes)]
+
+    set_config(transform_output="pandas")
+    # Build a targeted preprocessor
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('robust', RobustScaler(), robust_features),
+            ('standard', StandardScaler(), standard_features),
+            # ('bounded', MinMaxScaler(feature_range=(-1, 1)), bounded_features)
+        ],
+        remainder='passthrough',
+        verbose_feature_names_out=False,
+
+        )
+
+    # Construct the final SVR Pipeline
+    svr_pipeline = Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('regressor', SVR(kernel='rbf', C=model_params['C'], epsilon=model_params['epsilon'], gamma='scale', cache_size=1000, shrinking=False))
+    ])
+
+    # scaler = StandardScaler()
+    # X_train_scaled = scaler.fit_transform(X_train)
+    # model_svr = SVR(kernel='rbf', C=model_params['C'], epsilon=model_params['epsilon'], gamma='scale', cache_size=1000, shrinking=False)
+    # model_svr.fit(X_train_scaled, y_train)
+
+    svr_pipeline.fit(X_train, y_train)
+    # fitted_preprocessor = svr_pipeline.named_steps['preprocessor']
+
+    # X_train_scaled = fitted_preprocessor.transform(X_train)
+    # X_train_scaled.to_csv(f'X_train_scaled_{rand_int}.csv')
+    
+    # print("X_train_scaled columns: ", X_train_scaled.columns)
+    # print(X_train_scaled.head())
+
+    # # retrieving the RF Classifier from the model pipeline
+    # svr_regressor = svr_pipeline[-1]
+    # # making a pandas dataframe
+    # data = list(zip(svr_regressor.feature_names_in_, svr_regressor.feature_importances_))
+    # df_importances = pd.DataFrame(data, columns=['Feature', 'Importance']).sort_values(by='Importance', ascending=False)
+    # print(df_importances.head(10))
+        
+    print("svr model: ", svr_pipeline)
+
 
     if X_test is None:
-        return model_svr, scaler
-    X_test_scaled = scaler.transform(X_test)
-    
-    print("svr model: ", model_svr)
+        return svr_pipeline, None                 #, fitted_preprocessor
 
+    
     print("Predicting...")
-    y_pred = model_svr.predict(X_test_scaled)-1
+    # y_pred = model_svr.predict(X_test_scaled)-1
+    y_pred = svr_pipeline.predict(X_test) - 1
     print("y_pred: ", y_pred)
 
     hist, bins = np.histogram(y_pred)
     print("y_pred distribution: ", hist, bins)
 
-    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
     # data_target = data_target.join(y_series, how='left')
@@ -688,7 +738,7 @@ def do_backtest_Strategy_svr_regression(X_train, y_train, X_test, y_test, data_t
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
+        Daytrading_strategy if not params['evals_strategy'] else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,
@@ -701,13 +751,13 @@ def do_backtest_Strategy_svr_regression(X_train, y_train, X_test, y_test, data_t
 
     return y_series, stats
 
-def do_backtest_Strategy_svc_classification(X_train, y_train, X_test, y_test, data_target, params, evals_strategy=False):
+def do_backtest_Strategy_svc_classification(X_train, y_train, X_test, y_test, data_target, model_params, params):
 
     # Scale data
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
 
-    model_svc = SVC(kernel='rbf', C=params['C'], gamma='scale', cache_size=1000, shrinking=False)
+    model_svc = SVC(kernel='rbf', C=model_params['C'], gamma='scale', cache_size=1000, shrinking=False)
     model_svc.fit(X_train_scaled, y_train)
 
     if X_test is None:
@@ -723,7 +773,7 @@ def do_backtest_Strategy_svc_classification(X_train, y_train, X_test, y_test, da
     hist, bins = np.histogram(y_pred)
     print("y_pred distribution: ", hist, bins)
 
-    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=params['pred_ewm_span'], adjust=False).mean()
+    y_series = pd.Series(y_pred.flatten(), index=X_test.index, name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
 
     # print("Joining y_series to data_target...")
     # data_target = data_target.join(y_series, how='left')
@@ -732,7 +782,7 @@ def do_backtest_Strategy_svc_classification(X_train, y_train, X_test, y_test, da
     print("Backtesting...")
 
     bt = Backtest(data_target,
-        Daytrading_strategy if not evals_strategy else Trailing_drawdown_strategy,
+        Daytrading_strategy if not params['evals_strategy'] else Trailing_drawdown_strategy,
         cash=100000,
         spread=0,
         commission=COMMISSION,

@@ -21,7 +21,7 @@ from src.model.mlflow_utils import (
 load_dotenv()
 
 TARGET_METRICS_DEFAULT = ('optimisation_score', 'total_profit')
-NUM_BEST_TRIALS = 10
+NUM_BEST_TRIALS = 20
 FIRST_TRIAL_NAME = 'Trial_0'
 
 # logging configuration

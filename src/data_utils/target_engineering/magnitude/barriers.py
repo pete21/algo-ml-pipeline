@@ -1,7 +1,7 @@
 import numpy as np
-from tqdm import tqdm
-from numba import njit
 import pandas as pd
+from numba import njit
+from tqdm import tqdm
 
 
 @njit
@@ -17,12 +17,12 @@ def _fast_barrier_buy(
     sl: float = -0.01,
 ) -> float:
     n = len(open_arr)
+    open_price = open_arr[i]
     for j in range(n):
         idx = i + j
         if idx >= n:
             break  # Avoid out-of-bounds
 
-        open_price = open_arr[i]
         high_price = high_arr[i + j]
         low_price = low_arr[i + j]
 
@@ -33,9 +33,13 @@ def _fast_barrier_buy(
             if high_time_arr[i + j] < low_time_arr[i + j]:
                 delta = high_time_arr[i + j] - time_arr[i]
                 return delta / 3600
-            else:
+            elif high_time_arr[i + j] > low_time_arr[i + j]:
                 delta = low_time_arr[i + j] - time_arr[i]
                 return -delta / 3600
+            else:
+                # delta = (high_time_arr[i + j] + low_time_arr[i + j]) / 2 - time_arr[i]
+                # return -delta / 3600
+                continue                                                                      # TODO: not sure about this, SL and TP are at the same time, both hit, let's check the next candle
 
         elif tp <= var_high:
             delta = high_time_arr[i + j] - time_arr[i]
@@ -48,48 +52,52 @@ def _fast_barrier_buy(
     return 0.0
 
 
-@njit
-def _fast_barrier_sell(
-    i: int,
-    open_arr: np.ndarray,
-    high_arr: np.ndarray,
-    low_arr: np.ndarray,
-    high_time_arr: np.ndarray,
-    low_time_arr: np.ndarray,
-    time_arr: np.ndarray,
-    tp: float = 0.01,
-    sl: float = -0.01,
-) -> float:
-    n = len(open_arr)
-    for j in range(n):
-        idx = i + j
-        if idx >= n:
-            break  # Avoid out-of-bounds
+# @njit
+# def _fast_barrier_sell(
+#     i: int,
+#     open_arr: np.ndarray,
+#     high_arr: np.ndarray,
+#     low_arr: np.ndarray,
+#     high_time_arr: np.ndarray,
+#     low_time_arr: np.ndarray,
+#     time_arr: np.ndarray,
+#     tp: float = 0.01,
+#     sl: float = -0.01,
+# ) -> float:
+#     n = len(open_arr)
+#     open_price = open_arr[i]
+#     for j in range(n):
+#         idx = i + j
+#         if idx >= n:
+#             break  # Avoid out-of-bounds
 
-        open_price = open_arr[i]
-        high_price = high_arr[i + j]
-        low_price = low_arr[i + j]
+#         high_price = high_arr[i + j]
+#         low_price = low_arr[i + j]
 
-        var_high = (high_price - open_price) / open_price
-        var_low = (low_price - open_price) / open_price
+#         var_high = (high_price - open_price) / open_price
+#         var_low = (low_price - open_price) / open_price
 
-        if (tp <= -var_low) and (-var_high <= sl):
-            if low_time_arr[i + j] < high_time_arr[i + j]:
-                delta = low_time_arr[i + j] - time_arr[i]
-                return delta / 3600
-            else:
-                delta = high_time_arr[i + j] - time_arr[i]
-                return -delta / 3600
+#         if (tp <= -var_low) and (-var_high <= sl):
+#             if low_time_arr[i + j] < high_time_arr[i + j]:
+#                 delta = low_time_arr[i + j] - time_arr[i]
+#                 return delta / 3600
+#             elif low_time_arr[i + j] > high_time_arr[i + j]:
+#                 delta = high_time_arr[i + j] - time_arr[i]
+#                 return -delta / 3600
+#             else:
+#                 # delta = (low_time_arr[i + j] + high_time_arr[i + j]) / 2 - time_arr[i]
+#                 # return -delta / 3600
+#                 continue                                                                      # TODO: not sure about this, SL and TP are at the same time, both hit, let's check the next candle
 
-        elif tp <= -var_low:
-            delta = low_time_arr[i + j] - time_arr[i]
-            return delta / 3600
+#         elif tp <= -var_low:
+#             delta = low_time_arr[i + j] - time_arr[i]
+#             return delta / 3600
 
-        elif -var_high <= sl:
-            delta = high_time_arr[i + j] - time_arr[i]
-            return -delta / 3600
+#         elif -var_high <= sl:
+#             delta = high_time_arr[i + j] - time_arr[i]
+#             return -delta / 3600
 
-    return 0.0
+#     return 0.0
 
 
 def _fast_ind_barrier(
@@ -109,9 +117,10 @@ def _fast_ind_barrier(
             i, open_arr, high_arr, low_arr, high_time_arr, low_time_arr, time_arr, tp, sl
         )
     else:
-        return _fast_barrier_sell(
-            i, open_arr, high_arr, low_arr, high_time_arr, low_time_arr, time_arr, tp, sl
-        )
+        # return _fast_barrier_sell(
+        #     i, open_arr, high_arr, low_arr, high_time_arr, low_time_arr, time_arr, tp, sl
+        # )
+        raise NotImplementedError("Sell barrier labeling is not implemented yet")
 
 
 def continuous_barrier_labeling(
@@ -184,9 +193,7 @@ def continuous_barrier_labeling(
 
     # Convert timestamps to UNIX seconds
     df_copy["time_int"] = pd.to_datetime(df_copy["time"]).astype("int64") // 1_000_000_000
-    df_copy["high_time_int"] = (
-        pd.to_datetime(df_copy[high_time_col]).astype("int64") // 1_000_000_000
-    )
+    df_copy["high_time_int"] = pd.to_datetime(df_copy[high_time_col]).astype("int64") // 1_000_000_000
     df_copy["low_time_int"] = pd.to_datetime(df_copy[low_time_col]).astype("int64") // 1_000_000_000
 
     # Extract arrays

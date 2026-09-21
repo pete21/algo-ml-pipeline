@@ -1,11 +1,11 @@
 data_ingestion:
   data_path: 'data/src'
   data_path_dest: 'data/raw'
-  ticker: 'DAX40' # 'SP500' 'NQ100'
+  ticker: 'DAX40' # 'DAX40' # 'SP500' # 'NQ100'
   data_source: 'questdb'
   table_name: 'DUKASCOPY_{ticker}_OHLC_{timeframe}'
   start_date: '2021-07-01'
-  end_date: '2026-08-14'
+  end_date: '2026-09-18'
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   index_barrier: 1
   index_base: 5
@@ -19,18 +19,19 @@ data_ingestion:
 data_preprocessing:
   data_path: 'data/raw'
   data_path_dest: 'data/interim'
-  ticker: 'DAX40' # 'SP500' 'NQ100'
+  ticker: 'DAX40' # 'DAX40' # 'SP500' # 'NQ100'
   index_base: 5
   indexes_higher: [6,7,8,9,10]
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
   timeframe_scalers: [0.22, 0.44, 0.63, 0.77, 0.89, 1, 1.4, 1.7, 2, 2.4, 3.4, 4.8, 6.8, 9.6]
   file_name: 'data_ohlc_{timeframe}.csv'
-  local_timezone: "America/New_York" # 'Europe/Berlin'
+  local_timezone: "Europe/Berlin" # "Europe/Berlin" # "America/New_York"
 
 model_building:
   data_path: 'data/interim'
   models_path: 'data/models'
-  ticker: 'DAX40' # 'SP500' 'NQ100'
+  ticker: 'DAX40' # 'DAX40' # 'SP500' # 'NQ100'
+  index_backtesting: 1
   index_base: 5
   indexes_higher: [7,10]
   timeframes: ['10s', '1m', '2m', '3m', '4m', '5m', '10m', '15m', '20m', '30m', '1h', '2h', '4h', '1d']
@@ -38,9 +39,9 @@ model_building:
   timeframe_minutes: [0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 60, 120, 240, 1440]
   file_name: 'data_static_features_{timeframe}.csv'
   list_X: [
-    'ha_open',
-    'ha_high',
-    'ha_low',
+    # 'ha_open',
+    # 'ha_high',
+    # 'ha_low',
     'ha_close',
     # 'Open',
     # 'High',
@@ -55,23 +56,25 @@ model_building:
     #'sma1',
     # 'kijun_sen',
     #'lowerband',
-    'sine',
+    # 'sine',
+    'sine_diff',
+    'integer',
     #'middleband',
     #'upperband',
-    'sine_diff_slope_2',
+    # 'sine_diff_slope_2',
     #'ema2',
     #'sma2',
-    'sine_diff_slope_5',
+    # 'sine_diff_slope_5',
     'kama_trend_slow',
     'kama_trend_fast',
     'kama_trend_slow_diff',
     'kama_trend_fast_diff',
     'kama_trend_slow_diff2',
     'kama_trend_fast_diff2',
-    'macdhist',
     'sma_cross',
     #'log_ret_1',
     'lowerband_r',
+    'upperband_r',
     #'down_displacement_low',
     #'down_displacement_high',
     #'bullish_gap_size',
@@ -79,10 +82,11 @@ model_building:
     #'displacement',
     #'bearish_gap_size',
     #'macd',
+    'macdhist_slope',
     'stochk_slope',
     #'dc_market_regime_ema',
     #'dc_market_regime_wma',
-    'dc_market_regime_ema_log',
+    'dc_market_regime_ema_log',     # to be confirmed, or ema, or wma
     'ha_slope_2',
     'ema_cross',
     'log_ret_ha_1',
@@ -92,23 +96,23 @@ model_building:
     # 'log_ret_ha_5',
     # 'log_ret_2',
     'ppo',
-    'upperband_r',
+    'ppo_slope',
+
     'sar_r',
     #'ha_slope_15',
     'stochd',
     'kama_diff',
     #'bullish_gap_low',
     #'bullish_gap_high',
-    'bearish_gap',
+    # 'bearish_gap',
     #'log_ret_3',
     'rsi_slope',
-    'sine_diff',
     'stochrsid',
     #'bearish_gap_low',
     #'bearish_gap_high',
     'stochrsik',
-    'bullish_gap',
-    #'ha_slope_5',
+    # 'bullish_gap',
+    'ha_slope_5',
     'ha_slope_10',
     #'log_ret_4',
     'r_kijun_sen',
@@ -129,6 +133,7 @@ model_building:
     'di_plus',
     'di_minus',
     'cci_ha',
+    'cci_slope',
     #'cci',
     'rsi',
     'rsi_ha',
@@ -148,34 +153,87 @@ model_building:
 
     'long_pivot',
     'short_pivot',
+    'long_double_pivot',
+    'short_double_pivot',
     'atr',
     'adx',
     ]
+  robust_prefixes: [
+    'ha_close',
+    'kama_trend_slow',
+    'kama_trend_fast',
+    'kama_trend_slow_diff',
+    'kama_trend_fast_diff',
+    'kama_trend_slow_diff2',
+    'kama_trend_fast_diff2',
+    'sma_cross',
+    'lowerband_r',
+    'upperband_r',
+    'macdhist_slope',
+    'stochk_slope',
+    'dc_market_regime_ema_log',     # to be confirmed, or ema, or wma
+    'ha_slope_2',
+    'ema_cross',
+    'log_ret_ha_1',
+    'log_ret_ha_2',
+    'log_ret_ha_3',
+    'sar_r',
+    'kama_diff',
+    'rsi_slope',
+    'ha_slope_5',
+    'ha_slope_10',
+    'r_kijun_sen',
+    'r_tenkan_sen',
+    'displacement_hull',
+    'displacement_hull_slope',
+    'ema_ha_sign',
+    'ema_ha_wickstrength',
+    'gap_hull',
+    'gap_hull_slope',
+    'di_plus',
+    'di_minus',
+    'cci_slope',
+    'permutation_entropy',
+    "skew",
+    "petrosian_fd",
+    'atr',
+    'adx',
+  ]
+  standard_prefixes: [
+    'sine_diff',
+    'cci_ha',
+    'ppo',
+    'long_pivot',
+    'short_pivot',
+    'long_double_pivot',
+    'short_double_pivot',
+  ]
+
   col_y: ['labeling_multi']
   lags: [1,2]
   version: 2
   model_type: 'svr_regression'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 1000
+  n_trials: 600
   num_splits: 25
   project_name: 'svr-pipeline'
   evals_strategy: False
-  local_timezone: 'Europe/Berlin' # "America/New_York" 'Europe/Berlin'
+  local_timezone: "Europe/Berlin" # "America/New_York" # "Europe/Berlin"
 
 model_evaluation:
-  experiment_id: 109
-  run_name: 'Trial_664'
+  experiment_id: 151      # model_building experiment_id, 109
+  run_name: ''            # 'Trial_664'
   num_best_trials: 5
   num_evaluations_per_trial: 10
 
 model_analysis:
-  experiment_id: 117
+  experiment_id: 151
   target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor', 'total_trades']
   analysis_path: 'data/models/analysis'
 
 model_registration:
-  experiment_id: 109
-  run_name: 'Trial_664'
+  experiment_id: 151
+  run_name: 'Trial_171'
   model_tag: 'Staging'
 
 
@@ -193,9 +251,9 @@ model_trade:
   indexes_higher: [7,10]
   file_name: '{ticker}/questdb_static_features_{timeframe}.csv'
   list_X: [
-    'ha_open',
-    'ha_high',
-    'ha_low',
+    # 'ha_open',
+    # 'ha_high',
+    # 'ha_low',
     'ha_close',
     # 'Open',
     # 'High',
@@ -210,20 +268,21 @@ model_trade:
     #'sma1',
     # 'kijun_sen',
     #'lowerband',
-    'sine',
+    # 'sine',
+    'sine_diff',
+    'integer',
     #'middleband',
     #'upperband',
-    'sine_diff_slope_2',
+    # 'sine_diff_slope_2',
     #'ema2',
     #'sma2',
-    'sine_diff_slope_5',
+    # 'sine_diff_slope_5',
     'kama_trend_slow',
     'kama_trend_fast',
     'kama_trend_slow_diff',
     'kama_trend_fast_diff',
     'kama_trend_slow_diff2',
     'kama_trend_fast_diff2',
-    'macdhist',
     'sma_cross',
     #'log_ret_1',
     'lowerband_r',
@@ -234,6 +293,7 @@ model_trade:
     #'displacement',
     #'bearish_gap_size',
     #'macd',
+    'macdhist_slope',
     'stochk_slope',
     #'dc_market_regime_ema',
     #'dc_market_regime_wma',
@@ -247,6 +307,7 @@ model_trade:
     # 'log_ret_ha_5',
     # 'log_ret_2',
     'ppo',
+    'ppo_slope',
     'upperband_r',
     'sar_r',
     #'ha_slope_15',
@@ -254,16 +315,15 @@ model_trade:
     'kama_diff',
     #'bullish_gap_low',
     #'bullish_gap_high',
-    'bearish_gap',
+    # 'bearish_gap',
     #'log_ret_3',
     'rsi_slope',
-    'sine_diff',
     'stochrsid',
     #'bearish_gap_low',
     #'bearish_gap_high',
     'stochrsik',
-    'bullish_gap',
-    #'ha_slope_5',
+    # 'bullish_gap',
+    'ha_slope_5',
     'ha_slope_10',
     #'log_ret_4',
     'r_kijun_sen',
@@ -284,6 +344,7 @@ model_trade:
     'di_plus',
     'di_minus',
     'cci_ha',
+    'cci_slope',
     #'cci',
     'rsi',
     'rsi_ha',
@@ -303,6 +364,8 @@ model_trade:
 
     'long_pivot',
     'short_pivot',
+    'long_double_pivot',
+    'short_double_pivot',
     'atr',
     'adx',
     ]

@@ -3,6 +3,7 @@ import logging
 import os
 
 import mlflow
+import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from mlflow.entities import Experiment
@@ -124,21 +125,31 @@ def load_model_params_from_experiment(experiment: Experiment, logger: logging.Lo
 # Search positive value runs and return run params
 def search_positive_value_runs(experiment: Experiment, num_runs: int = 10, run_name: str | None = None) -> list[dict]:
     """Search all positive value runs and return the run params of them."""
-    runs = mlflow.search_runs(
-        experiment_ids=[experiment.experiment_id],
-        filter_string=f"metrics.optimisation_score > 0 AND run_name = '{run_name}'" if run_name else "metrics.optimisation_score > 0 AND run_name LIKE 'Trial_%'",
-    )
-    print(f"Found {len(runs)} positive value Trials")
+
+    if (num_runs > 0):
+        runs = mlflow.search_runs(
+            experiment_ids=[experiment.experiment_id],
+            filter_string=f"metrics.optimisation_score > 0 AND run_name = '{run_name}'" if run_name else "metrics.optimisation_score > 0 AND run_name LIKE 'Trial_%'",
+        )
+        print(f"Found {len(runs)} positive value Trials")
+    elif (num_runs < 0):
+        runs = mlflow.search_runs(
+            experiment_ids=[experiment.experiment_id],
+            filter_string=f"metrics.optimisation_score < 0 AND run_name = '{run_name}'" if run_name else "metrics.optimisation_score < 0 AND run_name LIKE 'Trial_%'",
+        )
+        print(f"Found {len(runs)} negative value Trials")
+    else:
+        return []
     if runs.empty:
         return []
 
     # Sort rows by metrics.optimisation_score in descending order
-    runs = runs.sort_values(by="metrics.optimisation_score", ascending=False)
+    runs = runs.sort_values(by="metrics.optimisation_score", ascending=not num_runs > 0)
     # Extract columns with "params" prefix
     params_columns = [col for col in runs.columns if col.startswith("params.")]
     runs = runs[params_columns + ["metrics.optimisation_score", "metrics.win_rate", "metrics.total_trades", "metrics.sharpe_ratio", "metrics.total_profit", "tags.mlflow.runName"]]
     # print(runs.to_dict(orient="records"))
-    return runs.iloc[:num_runs].to_dict(orient="records")
+    return runs.iloc[:np.abs(num_runs)].to_dict(orient="records")
 
 
 def save_model_params(model_params: dict, file_path: str, logger: logging.Logger | None = None) -> None:

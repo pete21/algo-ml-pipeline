@@ -42,6 +42,48 @@ class Daytrading_strategy(Strategy):
             #     elif self.data.y_pred[-1]<-0.5 and self.position.size == -1:
             #         self.sell(size=1, limit=None, stop=None, tp=(1-self.data.tp[-1]/2)*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
 
+class Daytrading_strategy_reverse_trades(Strategy):
+
+    def init(self):
+        # In init() and in next() it is important to call the
+        # super method to properly initialize the parent classes
+        super().init()
+
+        # Set trailing stop-loss to 2x ATR using
+        # the method provided by `TrailingStrategy`
+#        self.set_trailing_sl(2)
+    def next(self):
+#        print(self.data.df['labeling_multi'].iloc[-1])
+        if self.data.DaytradingExit[-1]:
+            if self.position:      # daytrading
+                self.position.close()
+            return
+
+        if not self.position:
+            # if self.data.y_pred[-1]>=1:
+            if self.data.y_pred[-1]<=-1:
+                self.buy(size=1, limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1])*self.data.Close[-1], tag=None)
+                return
+            # if self.data.y_pred[-1]<=-1:
+            if self.data.y_pred[-1]>=1:
+                self.sell(size=1, limit=None, stop=None, tp=(1-self.data.tp[-1])*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
+                return
+
+        # else:   # if there is position
+
+        #     if self.position.pl_pct >= 0.002: # if profit percentage is greater than 0.15%, adjust stop-loss to sl/2 from current price (~ break even price)
+        #         for trade in self.trades:
+        #             if trade.is_long:
+        #                 trade.sl = max(trade.sl or -np.inf, (1-self.data.sl[-1]/2)*self.data.Close[-1])
+        #             elif trade.is_short:
+        #                 trade.sl = min(trade.sl or np.inf, (1+self.data.sl[-1]/2)*self.data.Close[-1])
+
+            # if self.position.pl_pct >= 0.0015: # if profit percentage is greater than 0.2%, open addon trade with half SL and half TP
+            #     if self.data.y_pred[-1]>0.5 and self.position.size == 1:
+            #         self.buy(size=1, limit=None, stop=None, sl=(1-self.data.sl[-1])*self.data.Close[-1], tp=(1+self.data.tp[-1]/2)*self.data.Close[-1], tag=None)
+            #     elif self.data.y_pred[-1]<-0.5 and self.position.size == -1:
+            #         self.sell(size=1, limit=None, stop=None, tp=(1-self.data.tp[-1]/2)*self.data.Close[-1], sl=(1+self.data.sl[-1])*self.data.Close[-1], tag=None)
+
 
 
 class Trailing_drawdown_strategy(Strategy):

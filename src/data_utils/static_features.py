@@ -16,9 +16,13 @@ from src.data_utils.features_engineering import math
 from src.data_utils.wavelet import wavelet_denoising_rolling
 
 
-def sliding_elementwise_mult(values: np.ndarray, weights: np.ndarray, scaler: float) -> float:
+def sliding_elementwise_mult_bak(values: np.ndarray, weights: np.ndarray, scaler: float) -> float:
     """Elementwise multiply window values by weights; return sum of products."""
     return float(np.dot(values, weights)/np.mean(values)*scaler)
+
+def sliding_elementwise_mult(values: np.ndarray, weights: np.ndarray) -> float:
+    """Elementwise multiply window values by weights; return sum of products."""
+    return float(np.dot(values, weights))
 
 def static_features(df: pd.DataFrame, scaler: float, high_col: str="high", low_col: str="low", open_col: str="open", close_col: str="close") -> pd.DataFrame:
     print(datetime.now().strftime('%H:%M:%S'))
@@ -30,10 +34,10 @@ def static_features(df: pd.DataFrame, scaler: float, high_col: str="high", low_c
 
     df.loc[:,'minute_of_day'] = df['local_date'].dt.hour * 60 + df['local_date'].dt.minute
 
-    df.loc[:,'hour_sin'] = np.sin(df['minute_of_day'] * np.pi / 720)
-    df.loc[:,'hour_cos'] = np.cos(df['minute_of_day'] * np.pi / 720)
-    df.loc[:,'dow_sin'] = np.sin(2 * np.pi * df['local_date'].dt.dayofweek / 7)
-    df.loc[:,'dow_cos'] = np.cos(2 * np.pi * df['local_date'].dt.dayofweek / 7)
+    df.loc[:,'hour_sin'] = np.sin(df['minute_of_day'] * np.pi / 1440)+0.5   # *2 +0.5 to achieve values between 0 and 1
+    df.loc[:,'hour_cos'] = np.cos(df['minute_of_day'] * np.pi / 1440)+0.5   # *2 +0.5 to achieve values between 0 and 1
+    df.loc[:,'dow_sin'] = np.sin(2 * np.pi * df['local_date'].dt.dayofweek / 14)+0.5   # *2 +0.5 to achieve values between 0 and 1
+    df.loc[:,'dow_cos'] = np.cos(2 * np.pi * df['local_date'].dt.dayofweek / 14)+0.5   # *2 +0.5 to achieve values between 0 and 1
 
     # df.loc[:,'day_of_week'] = df.index.dayofweek / 2 - 1
 
@@ -51,9 +55,9 @@ def static_features(df: pd.DataFrame, scaler: float, high_col: str="high", low_c
     df.loc[:,'sine_diff'] = df['sine']-df['leadsine']
 
     for i in [2,5,10]:
-        df.loc[:,f'ha_slope_{i}'] = talib.LINEARREG_ANGLE(df['log_ha_close'], i)*10/scaler
-        df.loc[:,f'sine_slope_{i}'] = talib.LINEARREG_ANGLE(df['sine'], i)/10
-        df.loc[:,f'sine_diff_slope_{i}'] = talib.LINEARREG_ANGLE(df['sine_diff'], i)/10
+        df.loc[:,f'ha_slope_{i}'] = talib.LINEARREG_SLOPE(df['log_ha_close'], i)*1000/scaler
+        # df.loc[:,f'sine_slope_{i}'] = talib.LINEARREG_SLOPE(df['sine'], i)
+        # df.loc[:,f'sine_diff_slope_{i}'] = talib.LINEARREG_SLOPE(df['sine_diff'], i)
 
 
     autocorrelations=[(2,4), (4,8), (6,12)] #, (12,24)]
@@ -103,17 +107,26 @@ def static_features(df: pd.DataFrame, scaler: float, high_col: str="high", low_c
     df.loc[:,"abs_log_ret_1"] = np.abs(df["log_ret_1"])
     df.loc[:,"tail_index_1"] = np.log(math.tail_index(df=df, col="abs_log_ret_1", window_size=24, k_ratio=0.10).replace([np.inf], np.nan).ffill())
 
-    df.loc[:,'close_regr_entropy'] = math.sample_entropy(df=df, col='Close', window_size=48)-1
-    df.loc[:,'permutation_entropy'] = math.permutation_entropy(df=df, col="Close", window_size=48, order=5)-0.5
-    df.loc[:,"skew"] = math.skewness(df=df, col="log_ret_1", window_size=48)
-    df.loc[:,"petrosian_fd"] = (math.petrosian_fd(df=df, col="Close", window_size=48)-1)*10
+    df.loc[:,'close_regr_entropy'] = math.sample_entropy(df=df, col='Close', window_size=36)-1
+    df.loc[:,'permutation_entropy'] = math.permutation_entropy(df=df, col="Close", window_size=36, order=5)-0.5
+    df.loc[:,"skew"] = math.skewness(df=df, col="log_ret_1", window_size=24)
+    df.loc[:,"petrosian_fd"] = (math.petrosian_fd(df=df, col="Close", window_size=24)-1)*10
 
     # Pivots
     print("pivots: "+datetime.now().strftime('%H:%M:%S'))
-    long_pivot = np.array([1,0,-1,0,1])-np.mean([1,0,-1,0,1])
-    short_pivot = np.array([-1,0,1,0,-1])-np.mean([-1,0,1,0,-1])
-    df.loc[:,'long_pivot'] = df.loc[:,"ha_low"].rolling(window=5, min_periods=5).apply(sliding_elementwise_mult, raw=True, kwargs={"weights": long_pivot, "scaler": 1000/scaler})
-    df.loc[:,'short_pivot'] = df.loc[:,"ha_high"].rolling(window=5, min_periods=5).apply(sliding_elementwise_mult, raw=True, kwargs={"weights": short_pivot, "scaler": 1000/scaler})
+    long_pivot_array = np.array([1,0,-1,0,1])
+    long_pivot = long_pivot_array-np.mean(long_pivot_array)
+    short_pivot = -long_pivot
+    # df.loc[:,'long_pivot'] = df.loc[:,"ha_close"].rolling(window=5, min_periods=5).apply(sliding_elementwise_mult, raw=True, kwargs={"weights": long_pivot, "scaler": 1000/scaler})
+    # df.loc[:,'short_pivot'] = df.loc[:,"ha_close"].rolling(window=5, min_periods=5).apply(sliding_elementwise_mult, raw=True, kwargs={"weights": short_pivot, "scaler": 1000/scaler})
+    df.loc[:,'long_pivot'] = df.loc[:,"ha_close"].rolling(window=5, min_periods=5).apply(sliding_elementwise_mult, raw=True, kwargs={"weights": long_pivot}) /df.loc[:,"ha_close"]*1000/scaler
+    df.loc[:,'short_pivot'] = df.loc[:,"ha_close"].rolling(window=5, min_periods=5).apply(sliding_elementwise_mult, raw=True, kwargs={"weights": short_pivot}) /df.loc[:,"ha_close"]*1000/scaler
+
+    long_double_pivot_array = np.array([1,0,-1,0,1.2,0.05,-0.8,0.1,1.25])
+    long_double_pivot = long_double_pivot_array-np.mean(long_double_pivot_array)
+    short_double_pivot = -long_double_pivot
+    df.loc[:,'long_double_pivot'] = df.loc[:,"ha_close"].rolling(window=9, min_periods=9).apply(sliding_elementwise_mult, raw=True, kwargs={"weights": long_double_pivot}) /df.loc[:,"ha_close"]*1000/scaler
+    df.loc[:,'short_double_pivot'] = df.loc[:,"ha_close"].rolling(window=9, min_periods=9).apply(sliding_elementwise_mult, raw=True, kwargs={"weights": short_double_pivot}) /df.loc[:,"ha_close"]*1000/scaler
 
     print(datetime.now().strftime('%H:%M:%S'))
     return df
