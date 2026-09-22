@@ -44,7 +44,6 @@ def load_data(data_path: str, params: dict, logger: logging.Logger) -> dict:
 
 
 
-
 def main(logger: logging.Logger) -> pd.DataFrame | None:
     print("Starting model inference process...")
     print(f"Start time: {datetime.now()}")
@@ -79,7 +78,6 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         params['timeframe_scalers'],
         params['list_X'],
         'target',
-        date.today() - timedelta(days=30),
         params['lags'],
         col_open="Open", col_high="High", col_low="Low", col_close="Close"
         )

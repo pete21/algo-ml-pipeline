@@ -100,7 +100,7 @@ def calc_aggregate_target(df, model_params: dict):
         df.loc[:,"labeling_multi"] = df.loc[:,"labeling_dual_ema1"]*model_params['target1_weight'] + df.loc[:,"labeling_dual_ema2"]*model_params['target2_weight'] + df.loc[:,"labeling_multi2"]*model_params['target3_weight']
 
 
-def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: list, experiment_id: str, model_params_override: dict | None = None) -> float:
+def objective(trial, data: dict, params: dict, unique_dates: list, experiment_id: str, model_params_override: dict | None = None) -> float:
 
     index_base = params['index_base']
     indexes_higher = params['indexes_higher']
@@ -121,7 +121,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
     # mlflow.xgboost.autolog()
 
     with mlflow.start_run(run_name=run_name) as run:
-        mlflow.log_param('cutoff_date', cutoff_date)
+        # mlflow.log_param('cutoff_date', cutoff_date)
         mlflow.log_param('evals_strategy', params['evals_strategy'])
         mlflow.log_params(params)
 
@@ -248,7 +248,7 @@ def objective(trial, data: dict, params: dict, cutoff_date: date, unique_dates: 
         p={}
         for i in indexes_higher:
             p[i] = model_params
-        X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], cutoff_date, lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
+        X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
         y=y+1
 
         # print(X_columns)
@@ -561,7 +561,7 @@ def train_register_model(data: dict, params: dict, unique_weekdates: list, train
         p={}
         for i in indexes_higher:
             p[i] = model_params
-        X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], date(2026,1,1), lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
+        X, y, X_columns = getXy(data, index_base, indexes_higher, model_params, p, timeframes, timeframe_scalers, list_X, col_y[0], lags, col_open="Open", col_high="High", col_low="Low", col_close="Close")
         y=y+1
 
         X.to_csv('X_reg.csv', index=True, header=True)

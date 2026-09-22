@@ -181,7 +181,7 @@ def main():
         data[params['index_backtesting']] = pd.read_csv(os.path.join(preprocessing_data_path, params['ticker'], preprocessing_file_name.format(timeframe=params['timeframes'][params['index_backtesting']])), parse_dates=True, index_col='date')
         
         unique_dates, unique_weekdates = get_dates(data, params['index_base'])
-        cutoff_date = data[params['index_base']].index.date.min()+pd.Timedelta(21, "D")
+        # cutoff_date = data[params['index_base']].index.date.min()+pd.Timedelta(21, "D")
 
         experiment_name = f'{params["project_name"]}-v{params["version"]}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
         if params['evals_strategy']:
@@ -195,7 +195,7 @@ def main():
         # experiment = mlflow.get_experiment(experiment_id=experiment_id)
 
         study = optuna.create_study(direction='maximize')
-        study.optimize(lambda trial: objective(trial, data, params, cutoff_date, unique_weekdates, experiment_id), n_trials=params['n_trials'])
+        study.optimize(lambda trial: objective(trial, data, params, unique_weekdates, experiment_id), n_trials=params['n_trials'])
         print("Best trial number: ", study.best_trial.number)
         print("Best parameters: ", study.best_params)
         print("Best score:", study.best_value)

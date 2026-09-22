@@ -60,9 +60,9 @@ def main():
     # Load the backtesting data from the ingestion directory
     data[model_building_params['index_backtesting']] = pd.read_csv(os.path.join(preprocessing_data_path, model_building_params['ticker'], preprocessing_file_name.format(timeframe=model_building_params['timeframes'][model_building_params['index_backtesting']])), parse_dates=True, index_col='date')
 
-    cutoff_date = data[model_building_params['index_base']].index.date.min()+pd.Timedelta(30, "D")
-    for d in data:
-        data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
+    # cutoff_date = data[model_building_params['index_base']].index.date.min()+pd.Timedelta(30, "D")
+    # for d in data:
+    #     data[d] = data[d].loc[data[d].index.date>=cutoff_date-pd.Timedelta(21, "D")]
     _, unique_weekdates = get_dates(data, model_building_params['index_base'])
 
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
@@ -84,7 +84,7 @@ def main():
         model_building_params['run_name'] = run_name
         for i in range(num_evaluations_per_trial):
             print(f"Evaluation {i+1} of {num_evaluations_per_trial} for run {run_name}")
-            optimisation_score = objective(None, data, model_building_params, cutoff_date, unique_weekdates, experiment_id, model_params_override=model_params)
+            optimisation_score = objective(None, data, model_building_params, unique_weekdates, experiment_id, model_params_override=model_params)
             print(f"Optimisation score: {optimisation_score}")
 
 

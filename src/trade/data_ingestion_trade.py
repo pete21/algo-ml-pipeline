@@ -16,6 +16,9 @@ TICKERS = {
     'SP500': '872703',
 }
 
+MIN_CANDLES_TO_FETCH = 1080
+MIN_DAYS_TO_FETCH = 14
+
 load_dotenv()
 questdb_url = os.getenv('QUESTDB_URL_TRADE')
 questdb_user = os.getenv('QUESTDB_RO_USER')
@@ -40,10 +43,12 @@ SELECT timestamp, open, high, low, close FROM %(tickstream_table_1m)s where time
 def load_data_from_questdb(params: dict, connection: Connection, logger: logging.Logger) -> dict:
     """Load data from QuestDB."""
 
-    start_date = datetime.now() - timedelta(days=45)
+    # start_date = datetime.now() - timedelta(days=45)
+    now = datetime.now()
     try:
         data = {}
         for i in params['indexes_higher'] + [params['index_base']]:
+            start_date = min(now - timedelta(minutes=params['timeframe_minutes'][i]*MIN_CANDLES_TO_FETCH), now - timedelta(days=MIN_DAYS_TO_FETCH))       # 1080 hours -> 45 days - for hourly data, we fetch 45 days of data; for 5m data, we fetch 90 hours of data (4 days); we fetch at least 14 days of data to ensure we have enough data to calculate features;
             query = QUERY_TEMPLATE + params['timeframes'][i].lower()
             query_params = {
                 "table" : params['table_name'].format(ticker=TICKERS[params['ticker']], timeframe=params['timeframes'][i].upper()),

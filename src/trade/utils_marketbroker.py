@@ -3,6 +3,7 @@ import os
 
 import requests
 from dotenv import load_dotenv
+from requests.auth import HTTPBasicAuth
 
 load_dotenv()
 
@@ -17,6 +18,7 @@ TICKER_MARKET_MAP: dict[str, dict[str, int]] = {
     'Bitcoin': {'marketId': 67476, 'quoteId': 870964},
 }
 
+BASIC_AUTH = HTTPBasicAuth(os.getenv('BASIC_AUTH_USER'), os.getenv('BASIC_AUTH_PASSWORD'))
 
 def cancel_pending_order(order_id: int, logger: logging.Logger) -> bool:
     """Cancel a pending order."""
@@ -24,6 +26,7 @@ def cancel_pending_order(order_id: int, logger: logging.Logger) -> bool:
     try:
         response = requests.delete(
             url,
+            auth=BASIC_AUTH
         )
         return response.status_code == 200
     except requests.exceptions.RequestException as exc:
@@ -64,7 +67,8 @@ def submit_limit_order(
     try:
         response = requests.post(
             ORDER_API_URL,
-            json=payload
+            json=payload,
+            auth=BASIC_AUTH
         )
         return response.json()
     except requests.exceptions.RequestException as exc:
@@ -95,7 +99,8 @@ def close_position(ticker: str, order_id: int, logger: logging.Logger) -> dict:
     try:
         response = requests.post(
             ORDER_API_URL,
-            json=payload
+            json=payload,
+            auth=BASIC_AUTH
         )
         return response.json()
     except requests.exceptions.RequestException as exc:
@@ -116,7 +121,7 @@ def get_current_price(ticker: str, side: str, logger: logging.Logger) -> float:
     ]
     '''
     url = f"{INSTRUMENTS_API_URL}/ticks"
-    response = requests.get(url)
+    response = requests.get(url, auth=BASIC_AUTH)
     if response.status_code != 200:
         logger.error("Failed to get current price for %s: %s", ticker, response.status_code)
         print(f"Failed to get current price for {ticker}: {response.status_code}")

@@ -62,14 +62,15 @@ def get_dates(data: dict, index: int) -> tuple[list, list]:
     return unique_dates, unique_weekdates
 
 
-def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, timeframes: list, scalers: dict, X_cols: list, y_col: str, cutoff_date: date, lags: list, col_open="Open", col_high="High", col_low="Low", col_close="Close") -> tuple[pd.DataFrame, pd.DataFrame, list]:
-    cutoff_date_2 = cutoff_date - pd.Timedelta(7, "D")
+def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, timeframes: list, scalers: dict, X_cols: list, y_col: str, lags: list, col_open="Open", col_high="High", col_low="Low", col_close="Close") -> tuple[pd.DataFrame, pd.DataFrame, list]:
+    # cutoff_date_2 = cutoff_date - pd.Timedelta(7, "D")
+    cutoff_date_2 = {i: data[i].index.date.min() + pd.Timedelta(7, "D") for i in indexes_h + [index_b]}
 
     X_cols_with_open_high_low_close = list(dict.fromkeys(X_cols + [col_open, col_high, col_low, col_close]))                # Open, High, Low, Close are included in the X_cols_with_open_high_low_close list to avoid duplicate columns in the lag transform
 
     ml_data = {}
     ml_data[index_b] = dynamic_features(data[index_b], parameters, scalers[index_b], col_close=col_close, col_high=col_high, col_low=col_low)
-    ml_data[index_b] = ml_data[index_b][X_cols_with_open_high_low_close + [y_col] + ["date_merge", 'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'minute_of_day', 'local_date']].loc[ml_data[index_b].index.date>=cutoff_date_2]
+    ml_data[index_b] = ml_data[index_b][X_cols_with_open_high_low_close + [y_col] + ["date_merge", 'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'minute_of_day', 'local_date']].loc[ml_data[index_b].index.date>=cutoff_date_2[index_b]]
     print(ml_data[index_b])
     # target = ml_data[index_b].loc[(ml_data[index_b].index.hour>=parameters['hour_range_start']) & (ml_data[index_b].index.hour<=parameters['hour_range_start']+10), [y_col]]
 
@@ -77,7 +78,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 
     for i in indexes_h:
         ml_data[i] = dynamic_features(data[i], p[i], scalers[i], col_close=col_close, col_high=col_high, col_low=col_low)
-        ml_data[i] = ml_data[i][X_cols_with_open_high_low_close + ["date_merge"]].loc[ml_data[i].index.date>=cutoff_date_2]
+        ml_data[i] = ml_data[i][X_cols_with_open_high_low_close + ["date_merge"]].loc[ml_data[i].index.date>=cutoff_date_2[i]]
         print(ml_data[i])
         ml_data[i] = lag_f.fit_transform(ml_data[i]).add_suffix(f"_{timeframes[i]}")
         # print(ml_data[i].columns.values)
@@ -230,7 +231,7 @@ def getXy(data: dict, index_b: int, indexes_h: list, parameters: dict, p: dict, 
 
 
     # print("X_columns: ", X_columns)
-    ml_data[index_b] = ml_data[index_b].loc[ml_data[index_b].index.date>=cutoff_date]
+    ml_data[index_b] = ml_data[index_b].loc[ml_data[index_b].index.date>=max(cutoff_date_2.values()) + pd.Timedelta(1, "D")]
 
     X = ml_data[index_b][X_columns]
     y = ml_data[index_b][y_col]
