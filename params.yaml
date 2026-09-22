@@ -214,8 +214,8 @@ model_building:
   version: 2
   model_type: 'svr_regression'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 2
-  num_splits: 5
+  n_trials: 100
+  num_splits: 25
   project_name: 'svr-pipeline'
   evals_strategy: False
   local_timezone: "Europe/Berlin" # "America/New_York" # "Europe/Berlin"
@@ -223,8 +223,8 @@ model_building:
 model_evaluation:
   experiment_id: 153      # model_building experiment_id, 109
   run_name: ''            # 'Trial_664'
-  num_best_trials: 1
-  num_evaluations_per_trial: 2
+  num_best_trials: 5
+  num_evaluations_per_trial: 10
 
 model_analysis:
   experiment_id: 153

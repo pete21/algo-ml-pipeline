@@ -24,10 +24,6 @@ questdb_url = os.getenv('QUESTDB_URL_TRADE')
 questdb_user = os.getenv('QUESTDB_RO_USER')
 questdb_password = os.getenv('QUESTDB_RO_PASSWORD')
 
-print(f"QUESTDB_URL_TRADE: {questdb_url}")
-print(f"QUESTDB_RO_USER: {questdb_user}")
-print(f"QUESTDB_RO_PASSWORD: {questdb_password}")
-
 
 QUERY_TEMPLATE = """SELECT timestamp as date, open as Open, high as High, low as Low, close as Close FROM %(table)s where timestamp>=%(start_date)s
 UNION
