@@ -12,6 +12,7 @@ from kafka import KafkaConsumer
 
 from src.trade.data_ingestion_trade import main as data_ingestion_trade_main
 from src.trade.db_utils import (
+    get_active_orders,
     get_mysql_connection,
     get_open_orders,
     insert_db_order,
@@ -23,6 +24,7 @@ from src.trade.model_inference_trade import main as model_inference_trade_main
 from src.trade.utils_marketbroker import (
     cancel_pending_order,
     get_current_price,
+    list_orders,
     submit_limit_order,
 )
 from src.trade.utils_model_serving import fetch_model_info
@@ -247,6 +249,98 @@ def _next_scheduled_time(now: datetime | None = None, interval_minutes: int = 5,
     return candidate
 
 
+def _broker_order_event_type(order: dict) -> str:
+    close_price = float(order.get('closePrice') or 0)
+    open_price = float(order.get('openPrice') or 0)
+    if close_price != 0:
+        return 'CLOSED'
+    if open_price != 0:
+        return 'FILLED'
+    return 'PENDING'
+
+
+def _parse_broker_datetime_to_unix(value: str | None) -> int:
+    if not value:
+        return 0
+    return int(datetime.fromisoformat(value).timestamp())
+
+
+def _broker_order_to_kafka_event(order: dict) -> dict:
+    """Map a marketbroker GET /orders item to a kafka-like transaction event."""
+    event_type = _broker_order_event_type(order)
+    close_price = float(order.get('closePrice') or 0)
+    open_price = float(order.get('openPrice') or 0)
+    if close_price != 0:
+        price = close_price
+        event_time = _parse_broker_datetime_to_unix(order.get('closeDate'))
+    elif open_price != 0:
+        price = open_price
+        event_time = _parse_broker_datetime_to_unix(order.get('openDate'))
+    else:
+        price = float(order.get('price') or 0)
+        event_time = _parse_broker_datetime_to_unix(order.get('createdAt'))
+
+    return {
+        'o': int(order['orderId']),
+        'p': int(order.get('positionId') or 0),
+        'type': event_type,
+        'price': price,
+        'sl': order.get('stopOrderPrice'),
+        'tp': order.get('limitOrderPrice'),
+        't': event_time,
+    }
+
+
+def sync_active_orders_from_broker() -> None:
+    """Poll marketbroker for active DB orders and update local status."""
+    connection = get_mysql_connection()
+    try:
+        active_orders = get_active_orders(connection, TICKER)
+        if not active_orders:
+            logger.debug('No active orders to sync.')
+            return
+
+        active_order_ids = {
+            int(row['order_id'])
+            for row in active_orders
+            if row.get('order_id') is not None
+        }
+        if not active_order_ids:
+            return
+
+        broker_orders = list_orders(logger)
+        for order in broker_orders:
+            order_id = order.get('orderId')
+            if order_id is None or int(order_id) not in active_order_ids:
+                continue
+            event = _broker_order_to_kafka_event(order)
+            logger.info('Syncing broker order as event: %s', event)
+            update_order_from_kafka_event(connection, event, logger)
+    finally:
+        connection.close()
+
+
+def active_orders_sync_loop(stop_event: threading.Event) -> None:
+    """At every minute + 45s, sync active orders from marketbroker."""
+    logger.info('Starting active-orders sync loop (every 1 min at :45)')
+    while not stop_event.is_set():
+        scheduled_at = _sleep_until_next_cycle(
+            logger=logger,
+            interval_minutes=1,
+            schedule_offset_seconds=45,
+        )
+        if stop_event.is_set():
+            break
+        logger.info(
+            'Active-orders sync start: %s (scheduled: %s)',
+            datetime.now(),
+            scheduled_at,
+        )
+        try:
+            sync_active_orders_from_broker()
+        except Exception as exc:
+            logger.error('Active-orders sync failed: %s', exc)
+
 
 def run_cycle() -> None:
     """Run a single cycle of the trade agent."""
@@ -328,14 +422,24 @@ def main() -> None:
         SCHEDULE_OFFSET_SECONDS,
     )
     stop_event = threading.Event()
-    kafka_thread = threading.Thread(
-        target=kafka_listener_loop,
+    # kafka_thread = threading.Thread(
+    #     target=kafka_listener_loop,
+    #     args=(stop_event,),
+    #     name='kafka-transactions-listener',
+    #     daemon=True,
+    # )
+    # kafka_thread.start()
+    # logger.info('Kafka transactions event listener thread started.')
+
+    sync_thread = threading.Thread(
+        target=active_orders_sync_loop,
         args=(stop_event,),
-        name='kafka-transactions-listener',
+        name='active-orders-sync',
         daemon=True,
     )
-    kafka_thread.start()
-    logger.info('Kafka transactions event listener thread started.')
+    sync_thread.start()
+    logger.info('Active-orders sync thread started.')
+
     while True:
         scheduled_at = _sleep_until_next_cycle(logger=logger, interval_minutes=INTERVAL_MINUTES, schedule_offset_seconds=SCHEDULE_OFFSET_SECONDS)
         logger.info("Cycle start time: %s (scheduled: %s)", datetime.now(), scheduled_at)
@@ -350,6 +454,7 @@ def main() -> None:
     # # on shutdown (SIGINT handler, atexit, etc.)
     # stop_event.set()
     # kafka_thread.join(timeout=10)
+    # sync_thread.join(timeout=10)
 
 if __name__ == '__main__':
     main()
