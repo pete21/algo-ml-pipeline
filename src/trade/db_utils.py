@@ -113,6 +113,15 @@ def get_open_orders(connection: mysql.connector.MySQLConnection, ticker: str) ->
     cursor.close()
     return order_dict if order_dict else {}
 
+def get_active_orders(connection: mysql.connector.MySQLConnection, ticker: str) -> dict:
+    """Get all active orders for the ticker."""
+    cursor = connection.cursor()
+    sql = f"SELECT order_id FROM {ORDERS_TABLE} WHERE ticker = %s AND active = 1"
+    cursor.execute(sql, (ticker,))
+    orders = cursor.fetchall()
+    order_dict = [dict(zip([key[0] for key in cursor.description], row)) for row in orders]
+    cursor.close()
+    return order_dict if order_dict else {}
 
 def update_order_from_kafka_event(connection: mysql.connector.MySQLConnection, event: dict, logger: logging.Logger) -> None:
     """Update order from a market broker transaction event."""

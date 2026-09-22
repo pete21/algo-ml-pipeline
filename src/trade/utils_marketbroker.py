@@ -20,6 +20,15 @@ TICKER_MARKET_MAP: dict[str, dict[str, int]] = {
 
 BASIC_AUTH = HTTPBasicAuth(os.getenv('BASIC_AUTH_USER'), os.getenv('BASIC_AUTH_PASSWORD'))
 
+def list_orders(logger: logging.Logger) -> list[dict]:
+    """List all orders."""
+    url = f"{ORDER_API_URL}"
+    response = requests.get(url, auth=BASIC_AUTH)
+    if response.status_code != 200:
+        logger.error("Failed to list orders: %s", response.status_code)
+        return []
+    return response.json()
+
 def cancel_pending_order(order_id: int, logger: logging.Logger) -> bool:
     """Cancel a pending order."""
     url = f"{ORDER_API_URL}/{order_id}"
