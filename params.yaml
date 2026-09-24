@@ -42,7 +42,7 @@ model_building:
     # 'ha_open',
     # 'ha_high',
     # 'ha_low',
-    'ha_close',
+    # 'ha_close',
     # 'Open',
     # 'High',
     # 'Low',
@@ -159,7 +159,7 @@ model_building:
     'adx',
     ]
   robust_prefixes: [
-    'ha_close',
+    # 'ha_close',
     'kama_trend_slow',
     'kama_trend_fast',
     'kama_trend_slow_diff',
@@ -214,25 +214,25 @@ model_building:
   version: 2
   model_type: 'svr_regression'
   # model_params_name: 'model_params_{timeframe}_v{version}.json'
-  n_trials: 100
+  n_trials: 600
   num_splits: 25
   project_name: 'svr-pipeline'
   evals_strategy: False
   local_timezone: "Europe/Berlin" # "America/New_York" # "Europe/Berlin"
 
 model_evaluation:
-  experiment_id: 153      # model_building experiment_id, 109
+  experiment_id: 155      # model_building experiment_id, 109
   run_name: ''            # 'Trial_664'
   num_best_trials: 5
   num_evaluations_per_trial: 10
 
 model_analysis:
-  experiment_id: 153
+  experiment_id: 155
   target_metrics: ['optimisation_score', 'total_profit', 'sharpe_ratio', 'win_rate', 'profit_factor', 'total_trades']
   analysis_path: 'data/models/analysis'
 
 model_registration:
-  experiment_id: 153
+  experiment_id: 155
   run_name: 'Trial_0'
   model_tag: 'Staging'
 

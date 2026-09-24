@@ -714,7 +714,7 @@ def do_backtest_Strategy_svr_regression(X_train, y_train, X_test, y_test, data_t
     # df_importances = pd.DataFrame(data, columns=['Feature', 'Importance']).sort_values(by='Importance', ascending=False)
     # print(df_importances.head(10))
         
-    print("svr model: ", svr_pipeline)
+    # print("svr model: ", svr_pipeline)
 
 
     if X_test is None:

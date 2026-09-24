@@ -116,7 +116,7 @@ def get_open_orders(connection: mysql.connector.MySQLConnection, ticker: str) ->
 def get_active_orders(connection: mysql.connector.MySQLConnection, ticker: str) -> dict:
     """Get all active orders for the ticker."""
     cursor = connection.cursor()
-    sql = f"SELECT order_id FROM {ORDERS_TABLE} WHERE ticker = %s AND active = 1"
+    sql = f"SELECT order_id FROM {ORDERS_TABLE} WHERE ticker = %s AND active = 1 AND status in (0,1,2)"
     cursor.execute(sql, (ticker,))
     orders = cursor.fetchall()
     order_dict = [dict(zip([key[0] for key in cursor.description], row)) for row in orders]
