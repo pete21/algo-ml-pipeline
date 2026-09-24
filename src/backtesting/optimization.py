@@ -9,8 +9,8 @@ import mlflow
 import numpy as np
 import pandas as pd
 import pytz
-from joblib import dump
 
+# from joblib import dump
 from src.backtesting.strategies import (
     do_backtest_Strategy_elasticnet_regression,
     do_backtest_Strategy_lasso_regression,
@@ -188,7 +188,7 @@ def objective(trial, data: dict, params: dict, unique_dates: list, experiment_id
 
             'train_range_len': trial.suggest_int('train_range_len', 21, 26),
             'test_range_len': trial.suggest_int('test_range_len', 4, 4),  #3,5
-            'hour_range_start': trial.suggest_int('hour_range_start', 495, 570, step=15),
+            'hour_range_start': trial.suggest_int('hour_range_start', 360, 600, step=15),
             # 'hour_range_stop': trial.suggest_int('hour_range_stop', 20, 20),
             'adx_timeperiod': trial.suggest_int('adx_timeperiod', 3, 12),      #5,15
             'di_timeperiod': trial.suggest_int('di_timeperiod', 9, 15),
@@ -321,7 +321,7 @@ def objective(trial, data: dict, params: dict, unique_dates: list, experiment_id
             data_target['tp']=model_params['tp']+data_target['atr']/100*model_params['atr_TP_multiplier']
             
             # data_target['DaytradingExit'] = ((data_target.index.date != data_target.index.to_series().shift(periods=-1).dt.date) | (data_target.index.date != data_target.index.to_series().shift(periods=-2).dt.date))
-            data_target['DaytradingExit'] = (data_target['minute_of_day'] >= 21*60-10) & (data_target['minute_of_day'] <= 21*60)
+            data_target['DaytradingExit'] = (data_target['minute_of_day'] >= params['daytrading_exit_hour']*60-10) & (data_target['minute_of_day'] <= params['daytrading_exit_hour']*60)
 
             X_test = X_test.loc[(X_test['minute_of_day']>=model_params['hour_range_start']) & (X_test['minute_of_day']<model_params['hour_range_stop'])]
 
@@ -374,9 +374,9 @@ def objective(trial, data: dict, params: dict, unique_dates: list, experiment_id
             mlflow.log_metric('sortino_mean', sortino_mean)
             # mlflow.log_metric('calmar_mean', calmar_mean)
 
-            total_return_percentage = total_profit/1000
-            mlflow.log_metric('total_return_percentage', total_return_percentage)
-            mlflow.log_metric('total_expectancy_percentage', total_return_percentage / total_trades)
+            # total_return_percentage = total_profit/1000
+            # mlflow.log_metric('total_return_percentage', total_return_percentage)
+            # mlflow.log_metric('total_expectancy_percentage', total_return_percentage / total_trades)
 
             wins = [ s['_trades'].loc[s['_trades']['PnL']>0,'PnL'] for s in stats ]
             losses = [ s['_trades'].loc[s['_trades']['PnL']<0,'PnL'] for s in stats ]
