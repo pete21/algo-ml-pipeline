@@ -321,7 +321,7 @@ def objective(trial, data: dict, params: dict, unique_dates: list, experiment_id
             data_target['tp']=model_params['tp']+data_target['atr']/100*model_params['atr_TP_multiplier']
             
             # data_target['DaytradingExit'] = ((data_target.index.date != data_target.index.to_series().shift(periods=-1).dt.date) | (data_target.index.date != data_target.index.to_series().shift(periods=-2).dt.date))
-            data_target['DaytradingExit'] = (data_target['minute_of_day'] >= params['daytrading_exit_hour']*60-10) & (data_target['minute_of_day'] <= params['daytrading_exit_hour']*60)
+            data_target['DaytradingExit'] = (data_target['minute_of_day'] >= params['daytrading_exit_hour']*60-15) & (data_target['minute_of_day'] <= params['daytrading_exit_hour']*60)
 
             X_test = X_test.loc[(X_test['minute_of_day']>=model_params['hour_range_start']) & (X_test['minute_of_day']<model_params['hour_range_stop'])]
 

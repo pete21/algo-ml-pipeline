@@ -98,7 +98,7 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         # print(columns)
         num_rows = 10
         predictions = request_predictions(X=X, n_rows=num_rows, logger=logger)
-        print(f"Received {len(predictions.get('predictions', []))} predictions")
+        print(f"Received {len(predictions.get('predictions', []))} raw predictions, shifted by +1")
         print(predictions)
         # for i in predictions['predictions']:
             # print(i)
@@ -108,7 +108,7 @@ def main(logger: logging.Logger) -> pd.DataFrame | None:
         # y_pred_expected = np.matmul(predictions['predictions'], np.array([[-1],[0],[1]]))
         # y_series = pd.Series(y_pred-1, index=X_test.index, name="y_pred")
         # y_series = pd.Series(y_pred_expected.flatten(), index=X_test.index, name="y_pred").rolling(window=model_params['pred_avg_period'], min_periods=1).mean()
-        y_series = pd.Series(predictions['predictions'], index=X.index[-num_rows:], name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()
+        y_series = pd.Series(predictions['predictions'], index=X.index[-num_rows:], name="y_pred").ewm(span=model_params['pred_ewm_span'], adjust=False).mean()-1    # shift by -1 to get the correct prediction
         print(y_series)
 
     except Exception as e:

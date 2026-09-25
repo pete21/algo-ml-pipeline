@@ -321,13 +321,13 @@ def sync_active_orders_from_broker() -> None:
 
 
 def active_orders_sync_loop(stop_event: threading.Event) -> None:
-    """At every minute + 45s, sync active orders from marketbroker."""
-    logger.info('Starting active-orders sync loop (every 1 min at :45)')
+    """At every minute + 55s, sync active orders from marketbroker."""
+    logger.info('Starting active-orders sync loop (every 1 min at :55)')
     while not stop_event.is_set():
         scheduled_at = _sleep_until_next_cycle(
             logger=logger,
             interval_minutes=1,
-            schedule_offset_seconds=45,
+            schedule_offset_seconds=55,
         )
         if stop_event.is_set():
             break
