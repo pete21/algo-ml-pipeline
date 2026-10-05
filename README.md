@@ -1,6 +1,6 @@
 # Introduction
 
-Alpha backtesting engine and data pipeline for multi timeframe, stock market prediction using XGBoost, SVM Regressor, SVM Classifier, LightGBM, extensible to other ML and Deep learning models, including RL.
+Research to inference stack and data pipeline for data processing, parallelized/distributed model training and alpha backtesting using Data Version Control and Mlflow for data versioning, experiments tracking and reproducibility, optuna for optimisation. Compatible with XGBoost, SVM Regressor, SVM Classifier, LightGBM, extensible to other ML and Deep learning models, including RL.
 Can be deployed locally or on AWS (additional configuration required) via Lambda and Step Functions as part of an automated **MLOps** pipeline.
 
 Additional apps:
