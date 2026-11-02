@@ -20,22 +20,22 @@ While validated on CEE equity derivatives (WIG20 futures), the strategy and syst
 
 # Strategy metrics
 
-- Start date: 1. Oct 2025
-- Last date: 27. Oct 2026
-
-starting_capital,300000.000000
-final_equity,497609.000000
-total_pnl_nominal,197609.000000
-total_pnl_pct,65.869667
-returns_volatility,0.019305
-sharpe_ratio,1.750515
-sortino_ratio,2.806155
-max_drawdown,53127.500000
-max_drawdown_pct,16.227712
-open_position,0
-open_position_description,flat
-n_transactions,1432
-n_trading_days,271
+| Metric | Value |
+| --- | --- |
+| Start date | 1. Oct 2025 |
+| Last date | 27. Oct 2026 |
+| Starting capital | 300,000.00 PLN |
+| Final equity | 497,609.00 PLN |
+| Total PnL | 197,609.00 PLN |
+| Total PnL (%) | 65.869667% |
+| Returns volatility | 0.019305 |
+| Sharpe ratio | 1.750515 |
+| Sortino ratio | 2.806155 |
+| Max drawdown | 53,127.50 PLN |
+| Max drawdown (%) | 16.227712% |
+| Open position | 0 (flat) |
+| Transactions | 1,432 |
+| Trading days | 271 |
 
 
 ## Returns histogram
