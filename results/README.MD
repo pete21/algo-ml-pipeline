@@ -14,7 +14,7 @@ The strategy achieved a **65%+ live return** over the last 12 months by exploiti
 
 ## Goal
 
-While validated on CEE equity derivatives (with smaller HFT component, larger structura inefficiencies), the strategy is a starting point to its risk-return metrics (Sharpe) and scale up.
+While validated on CEE equity derivatives (small HFT component, larger structural inefficiencies), the strategy is a starting point to improve its risk-return metrics (Sharpe) and scale up.
 
 The research framework is built to scale across broader EMEA futures (and other asset classes).
 
