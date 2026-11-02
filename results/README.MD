@@ -1,65 +1,55 @@
-
-
-# Stragegy description
-
-systematic mean-reversion strategy on WIG20 futures. It achieved a 65%+ live return over the last 12 months by exploiting micro-structural gaps and market sentiment. utilizing strict overnight size reductions. While validated on CEE equity derivatives
+# Strategy description
 
 
 
-## Returns and drawdown
+Systematic strategy which identifies trending opportunities where a SVM regression, xgboost, neural network predicts whether a trend continues, paired with a regime-detection model to turn signals off or adapt during choppy, mean-reverting markets. Discretionary component acts as a macro risk circuit breaker.
+
+
+
+The strategy achieved a **65%+ live return** over the last 12 months by exploiting trends, reversals and micro-structural gaps with overnight size reductions.
+
+
 
 ![Equity and drawdown](equity.png)
 
-
 ## Goal
 
-While validated on CEE equity derivatives (WIG20 futures), the strategy and systematic market research framework is built to scale across broader EMEA futures.
+While validated on CEE equity derivatives (with smaller HFT component, larger structura inefficiencies), the strategy is a starting point to its risk-return metrics (Sharpe) and scale up.
+
+The research framework is built to scale across broader EMEA futures (and other asset classes).
 
 
 
+# Strategy metrics (after commissions)
 
-# Strategy metrics
-
-| Metric | Value |
-| --- | --- |
-| Start date | 1. Oct 2025 |
-| Last date | 27. Oct 2026 |
-| Starting capital | 300,000.00 PLN |
-| Final equity | 497,609.00 PLN |
-| Total PnL | 197,609.00 PLN |
-| Total PnL (%) | 65.869667% |
-| Returns volatility | 0.019305 |
-| Sharpe ratio | 1.750515 |
-| Sortino ratio | 2.806155 |
-| Max drawdown | 53,127.50 PLN |
-| Max drawdown (%) | 16.227712% |
-| Open position | 0 (flat) |
-| Transactions | 1,432 |
-| Trading days | 271 |
+| Metric             | Value          |
+| ------------------ | -------------- |
+| Start date         | 1. Oct 2025    |
+| Last date          | 27. Oct 2026   |
+| Starting capital   | 300,000.00 PLN |
+| Final equity       | 497,609.00 PLN |
+| Total PnL          | 197,609.00 PLN |
+| Total PnL (%)      | 65.9%          |
+| Returns volatility | 0.019305       |
+| Sharpe ratio       | 1.75           |
+| Sortino ratio      | 2.8            |
+| Max drawdown       | 53,127.50 PLN  |
+| Max drawdown (%)   | 16.2%          |
+| Open position      | 0 (flat)       |
+| Transactions       | 1,432          |
+| Trading days       | 271            |
 
 
-## Returns histogram
+
+## Appendix
+
+### Returns histogram
 
 ![Returns histogram](returns_histogram.png)
 
-[-0.093063:-0.07062]	2
-(-0.07062:-0.048177]	2
-(-0.048177:-0.025734]	8
-(-0.025734:-0.003291]	47
-(-0.003291:0.019153]	188
-(0.019153:0.041596]	16
-(0.041596:0.064039]	5
-(0.064039:0.086482]	1
-(0.086482:0.108925]	1
-(0.108925:0.131368]	1
 
 
-
-
-
-
-
-# Equity
+### Equity, drawdown timeseries
 
 | Date | Equity [PLN] | Drawdown [PLN] |
 | --- | ---: | ---: |
