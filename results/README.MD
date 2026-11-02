@@ -1,14 +1,8 @@
 # Strategy description
 
-
-
 Systematic strategy which identifies trending opportunities where a SVM regression, xgboost, neural network predicts whether a trend continues, paired with a regime-detection model to turn signals off or adapt during choppy, mean-reverting markets. Discretionary component acts as a macro risk circuit breaker.
 
-
-
 The strategy achieved a **65%+ live return** over the last 12 months by exploiting trends, reversals and micro-structural gaps with overnight size reductions.
-
-
 
 ![Equity and drawdown](equity.png)
 
@@ -17,8 +11,6 @@ The strategy achieved a **65%+ live return** over the last 12 months by exploiti
 While validated on CEE equity derivatives (small HFT component, larger structural inefficiencies), the strategy is a starting point to improve its risk-return metrics (Sharpe) and scale up.
 
 The research framework is built to scale across broader EMEA futures (and other asset classes).
-
-
 
 # Strategy metrics (after commissions)
 
@@ -29,25 +21,20 @@ The research framework is built to scale across broader EMEA futures (and other 
 | Starting capital   | 300,000.00 PLN |
 | Final equity       | 497,609.00 PLN |
 | Total PnL          | 197,609.00 PLN |
-| Total PnL (%)      | 65.9%          |
-| Returns volatility | 0.019305       |
-| Sharpe ratio       | 1.75           |
-| Sortino ratio      | 2.8            |
+| Total PnL (%)      | **65.9%**      |
+| Returns volatility | 0.019          |
+| Sharpe ratio       | **1.75**       |
+| Sortino ratio      | **2.8**        |
 | Max drawdown       | 53,127.50 PLN  |
-| Max drawdown (%)   | 16.2%          |
-| Open position      | 0 (flat)       |
+| Max drawdown (%)   | **16.2%**      |
 | Transactions       | 1,432          |
 | Trading days       | 271            |
-
-
 
 ## Appendix
 
 ### Returns histogram
 
 ![Returns histogram](returns_histogram.png)
-
-
 
 ### Equity, drawdown timeseries
 
